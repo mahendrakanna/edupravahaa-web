@@ -1,0 +1,23 @@
+{
+    "auth": {
+        "signup": "/api/auth/register/",
+        "login": "/api/auth/login/",
+        "sendOtp": "/api/auth/send-otp/",
+        "verifyOtp": "/api/auth/verify-otp/",
+        "forgotPassword": "/api/auth/forgot-password/",
+        "getProfile": "/api/auth/profile/",
+        "logout": "/api/auth/logout/",
+        "refreshToken": "/api/auth/refresh-token/"
+    },
+    "student": {
+        "trialStatus": "/api/auth/trial-status/"
+    },
+    "course":{
+        "courses": "/api/courses/",
+        "mycourses": "/api/courses/my_courses/"
+    },
+    "payments": {
+        "createOrder": "/api/payments/create_order/",
+        "verifyPayment": "/api/payments/verify_payment/"
+    }
+}

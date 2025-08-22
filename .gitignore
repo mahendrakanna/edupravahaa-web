@@ -1,0 +1,116 @@
+# ---------------------------------------------------------
+# Combined Git Ignore (Frontend + Backend)
+# ---------------------------------------------------------
+
+# ================================
+# Node.js / Frontend
+# ================================
+node_modules/
+.pnp/
+.pnp.js
+
+# Testing
+coverage/
+.coverage
+*.cover
+*.coverage.*
+htmlcov/
+.tox/
+.pytest_cache/
+coverage.xml
+junit.xml
+
+# Production
+build/
+demo-*
+
+# Debug / Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+*.out
+
+# Misc
+.docz
+.eslintcache
+.vscode
+.DS_Store
+Thumbs.db
+*.sublime-project
+*.sublime-workspace
+*.code-workspace
+*.swp
+*.swo
+
+# ================================
+# Python / Django Backend
+# ================================
+__pycache__/
+*.py[cod]
+*.so
+*.egg
+*.egg-info/
+.eggs/
+*.pot
+
+# Django Migrations (keep __init__.py)
+**/migrations/*.py
+
+# Media and Static (ignore generated/uploaded files, keep folders)
+media/*
+!media/.gitkeep
+static/*
+!static/.gitkeep
+
+# Virtual Environments
+venv/
+.venv/
+env/
+ENV/
+
+# Database
+*.sqlite3
+*.sqlite3-journal
+*.sql
+*.sql.gz
+*.dump
+
+# Local Dev Config
+local_settings.py
+settings_local.py
+
+# ================================
+# Environment Variables
+# ================================
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.backup
+
+# ================================
+# Docker
+# ================================
+Dockerfile.*
+*.dockerignore
+docker-compose.*.yml
+*.tar.gz
+*.bak
+
+# ================================
+# Build / Deployment
+# ================================
+*.pid
+*.seed
+*.pid.lock
+*.gz
+*.zip
+*.tar
+*.bak
+*.backup
+*.tmp
+*.temp
+*.prof
+*.pstats
