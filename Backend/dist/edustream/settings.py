@@ -5,10 +5,13 @@ Django settings for edustream project.
 from pathlib import Path
 import os
 from datetime import timedelta
-
+from dotenv import load_dotenv
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Decide which env to load
+env_file = os.environ.get("ENV_FILE", ".env.local")
+load_dotenv(os.path.join(BASE_DIR, "..", env_file))
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
@@ -27,7 +30,7 @@ ALLOWED_HOSTS = ['*']
 # Application definition
 
 INSTALLED_APPS = [
-    'daphne',
+    # 'daphne',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -82,29 +85,45 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'edustream.wsgi.application'
-ASGI_APPLICATION = 'edustream.asgi.application'
+DOCKERIZED = os.environ.get("DOCKERIZED", "False") == "True"
 
-# Channels configuration
-CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels_redis.core.RedisChannelLayer',
-        'CONFIG': {
-            "hosts": [(os.environ.get('REDIS_HOST', 'localhost'), 6379)],
-        },
-    },
-}
+if DOCKERIZED:
+    ASGI_APPLICATION = "edustream.asgi.application"
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {
+                "hosts": [(os.environ.get("REDIS_HOST", "localhost"), 6379)],
+            },
+        }
+    }
+else:
+    # Local dev: point to WSGI app so Daphne still sees something
+    ASGI_APPLICATION = "edustream.wsgi.application"
+    CHANNEL_LAYERS = {}
+
 
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
+
+
+import socket
+
+def get_postgres_host():
+    # When inside Docker, use host.docker.internal
+    if os.environ.get("DOCKERIZED", "False") == "True":
+        return os.environ.get("POSTGRES_HOST", "host.docker.internal")
+    # Otherwise (local venv), default to localhost
+    return os.environ.get("POSTGRES_HOST", "localhost")
 
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': os.environ.get('POSTGRES_DB', 'edustream_db'),
-        'USER': os.environ.get('POSTGRES_USER', 'edustream_user'),
-        'PASSWORD': os.environ.get('POSTGRES_PASSWORD', 'edustream_password'),
-        'HOST': os.environ.get('POSTGRES_HOST', 'localhost'),
-        'PORT': '5432',
+        'USER': os.environ.get('POSTGRES_USER', 'postgres'),
+        'PASSWORD': os.environ.get('POSTGRES_PASSWORD', 'qwerty@123'),
+        'HOST': get_postgres_host(),
+        'PORT': os.environ.get('POSTGRES_PORT', '5432'),
     }
 }
 
