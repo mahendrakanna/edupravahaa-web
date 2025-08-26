@@ -9,7 +9,7 @@ from django.conf import settings
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from edu_platform.permissions.auth_permissions import IsAdmin, IsTeacher, IsStudent
-from edu_platform.models import User, OTP
+from edu_platform.models import User, OTP, CourseSubscription
 from edu_platform.utility.email_services import send_otp_email
 from edu_platform.utility.sms_services import get_sms_service, ConsoleSMSService
 from edu_platform.serializers.auth_serializers import (
@@ -528,7 +528,6 @@ class TrialStatusView(views.APIView):
             })
         
         # Count purchased courses
-        from payments.models import CourseSubscription
         purchased_count = CourseSubscription.objects.filter(
             student=user,
             payment_status='completed'
