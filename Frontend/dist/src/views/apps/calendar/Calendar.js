@@ -2,7 +2,7 @@
 import { useEffect, useRef, memo } from 'react'
 
 // ** Full Calendar & it's Plugins
-import '@fullcalendar/react/dist/vdom'
+// import '@fullcalendar/react/dist/vdom'
 import FullCalendar from '@fullcalendar/react'
 import listPlugin from '@fullcalendar/list'
 import dayGridPlugin from '@fullcalendar/daygrid'

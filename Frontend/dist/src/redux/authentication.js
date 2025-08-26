@@ -111,6 +111,7 @@ export const logoutUser = createAsyncThunk(
       const { auth } = getState();
       const refreshToken = auth.refreshToken;
       const accessToken = auth.token;
+      console.log("acc",accessToken)
 
       const response = await axios.post(
         API_URL + apiList.auth.logout,
@@ -120,7 +121,6 @@ export const logoutUser = createAsyncThunk(
             'Content-Type': 'application/json',
             Authorization: `Bearer ${accessToken}`,
           },
-          withCredentials: true, 
         }
       );
 
