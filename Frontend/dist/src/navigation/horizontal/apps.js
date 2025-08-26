@@ -40,7 +40,7 @@ export default [
         id: 'calendar',
         title: 'Calendar',
         icon: <Calendar />,
-        navLink: '/apps/calendar'
+        navLink: '/calendar'
       },
       // {
       //   id: 'kanban',

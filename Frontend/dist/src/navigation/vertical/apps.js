@@ -28,7 +28,7 @@ export default [
     id: 'calendar',
     title: 'Calendar',
     icon: <Calendar size={20} />,
-    navLink: '/apps/calendar'
+    navLink: '/calendar'
   },
 
   //   {
