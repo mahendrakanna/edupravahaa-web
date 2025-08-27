@@ -8,11 +8,10 @@ class CreateOrderSerializer(serializers.Serializer):
 
     def validate_course_id(self, value):
         """Ensures course exists and is active."""
-        # Check if course exists and is active
         try:
             course = Course.objects.get(id=value, is_active=True)
         except Course.DoesNotExist:
-            raise serializers.ValidationError("Course not found or inactive")
+            raise serializers.ValidationError({"error": "Course not found or inactive."})
         
         # Check for existing completed subscription
         if CourseSubscription.objects.filter(
@@ -20,20 +19,19 @@ class CreateOrderSerializer(serializers.Serializer):
             course=course,
             payment_status='completed'
         ).exists():
-            raise serializers.ValidationError("Already subscribed to this course")
+            raise serializers.ValidationError({"error": "You are already subscribed to this course."})
         
         return value
 
     def validate(self, attrs):
         """Ensures user is verified before creating order."""
-        # Check user verification status
         if not self.context['request'].user.is_verified:
             errors = []
             if not self.context['request'].user.email_verified:
-                errors.append("Email not verified")
+                errors.append("Email not verified.")
             if not self.context['request'].user.phone_verified:
-                errors.append("Phone not verified")
-            raise serializers.ValidationError(errors)
+                errors.append("Phone not verified.")
+            raise serializers.ValidationError({"error": ", ".join(errors)})
         
         return attrs
 
@@ -47,7 +45,6 @@ class VerifyPaymentSerializer(serializers.Serializer):
 
     def validate(self, attrs):
         """Ensures subscription exists and is pending."""
-        # Verify subscription details
         try:
             subscription = CourseSubscription.objects.get(
                 id=attrs['subscription_id'],
@@ -56,7 +53,7 @@ class VerifyPaymentSerializer(serializers.Serializer):
                 payment_status='pending'
             )
         except CourseSubscription.DoesNotExist:
-            raise serializers.ValidationError("Subscription not found or already processed")
+            raise serializers.ValidationError({"error": "Subscription not found or already processed."})
         
         attrs['subscription'] = subscription
         return attrs

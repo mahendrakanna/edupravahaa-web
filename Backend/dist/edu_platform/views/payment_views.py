@@ -5,6 +5,7 @@ from django.conf import settings
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from django.utils import timezone
+from rest_framework import serializers
 from edu_platform.models import Course, CourseSubscription
 from edu_platform.permissions.auth_permissions import IsStudent
 from edu_platform.serializers.payment_serializers import CreateOrderSerializer, VerifyPaymentSerializer
@@ -17,7 +18,31 @@ client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_S
 # Set up logging
 logger = logging.getLogger(__name__)
 
-class CreateOrderView(views.APIView):
+def get_error_message(serializer):
+    """Extracts a specific error message from serializer errors."""
+    error_message = 'Invalid input data.'
+    for field in serializer.errors:
+        if isinstance(serializer.errors[field], dict) and 'error' in serializer.errors[field]:
+            return serializer.errors[field]['error']
+        elif isinstance(serializer.errors[field], list):
+            return serializer.errors[field][0]
+    if 'non_field_errors' in serializer.errors:
+        return serializer.errors['non_field_errors'][0]
+    if serializer.errors:
+        return list(serializer.errors.values())[0][0] if isinstance(list(serializer.errors.values())[0], list) else list(serializer.errors.values())[0]
+    return error_message
+
+class BaseAPIView(views.APIView):
+    def validate_serializer(self, serializer_class, data, context=None):
+        serializer = serializer_class(data=data, context=context or {'request': self.request})
+        if not serializer.is_valid():
+            raise serializers.ValidationError({
+                'error': get_error_message(serializer),
+                'status': status.HTTP_400_BAD_REQUEST
+            })
+        return serializer
+
+class CreateOrderView(BaseAPIView):
     """Creates a Razorpay order for course purchase."""
     permission_classes = [IsAuthenticated, IsStudent]
 
@@ -29,41 +54,82 @@ class CreateOrderView(views.APIView):
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'order_id': openapi.Schema(type=openapi.TYPE_STRING),
-                        'amount': openapi.Schema(type=openapi.TYPE_NUMBER),
-                        'currency': openapi.Schema(type=openapi.TYPE_STRING),
-                        'key': openapi.Schema(type=openapi.TYPE_STRING),
-                        'subscription_id': openapi.Schema(type=openapi.TYPE_INTEGER)
+                        'message': openapi.Schema(type=openapi.TYPE_STRING),
+                        'data': openapi.Schema(
+                            type=openapi.TYPE_OBJECT,
+                            properties={
+                                'order_id': openapi.Schema(type=openapi.TYPE_STRING),
+                                'amount': openapi.Schema(type=openapi.TYPE_NUMBER),
+                                'currency': openapi.Schema(type=openapi.TYPE_STRING),
+                                'key': openapi.Schema(type=openapi.TYPE_STRING),
+                                'subscription_id': openapi.Schema(type=openapi.TYPE_INTEGER)
+                            }
+                        )
                     }
                 )
             ),
-            400: "Bad Request",
-            403: "Forbidden",
-            404: "Course Not Found"
+            400: openapi.Response(
+                description="Invalid input",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'error': openapi.Schema(type=openapi.TYPE_STRING),
+                        'status': openapi.Schema(type=openapi.TYPE_INTEGER)
+                    }
+                )
+            ),
+            401: openapi.Response(
+                description="Unauthorized",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'error': openapi.Schema(type=openapi.TYPE_STRING),
+                        'status': openapi.Schema(type=openapi.TYPE_INTEGER)
+                    }
+                )
+            ),
+            403: openapi.Response(
+                description="Forbidden",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'error': openapi.Schema(type=openapi.TYPE_STRING),
+                        'status': openapi.Schema(type=openapi.TYPE_INTEGER)
+                    }
+                )
+            ),
+            500: openapi.Response(
+                description="Server error",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'error': openapi.Schema(type=openapi.TYPE_STRING),
+                        'status': openapi.Schema(type=openapi.TYPE_INTEGER)
+                    }
+                )
+            )
         }
     )
     def post(self, request):
         """Generates Razorpay order and creates/updates subscription."""
-        # Validate request data
-        serializer = CreateOrderSerializer(data=request.data, context={'request': request})
-        serializer.is_valid(raise_exception=True)
-        course_id = serializer.validated_data['course_id']
-        course = Course.objects.get(id=course_id, is_active=True)
-        
-        # Check for existing pending subscription
         try:
-            subscription = CourseSubscription.objects.get(
-                student=request.user,
-                course=course,
-                payment_status='pending'
-            )
-            logger.info(f"Reusing existing pending subscription {subscription.id} for user {request.user.id}, course {course.id}")
-        except CourseSubscription.DoesNotExist:
-            subscription = None
+            serializer = self.validate_serializer(CreateOrderSerializer, request.data)
+            course_id = serializer.validated_data['course_id']
+            course = Course.objects.get(id=course_id, is_active=True)
 
-        # Create Razorpay order
-        amount = int(course.base_price * 100)
-        try:
+            # Check for existing pending subscription
+            try:
+                subscription = CourseSubscription.objects.get(
+                    student=request.user,
+                    course=course,
+                    payment_status='pending'
+                )
+                logger.info(f"Reusing existing pending subscription {subscription.id} for user {request.user.id}, course {course.id}")
+            except CourseSubscription.DoesNotExist:
+                subscription = None
+
+            # Create Razorpay order
+            amount = int(course.base_price * 100)
             order_data = {
                 'amount': amount,
                 'currency': 'INR',
@@ -75,16 +141,14 @@ class CreateOrderView(views.APIView):
                 }
             }
             order = client.order.create(data=order_data)
-            
+
             # Update or create subscription
             if subscription:
-                # Update existing subscription with new order_id
                 subscription.order_id = order['id']
                 subscription.purchased_at = timezone.now()
                 subscription.save(update_fields=['order_id', 'purchased_at'])
                 logger.info(f"Updated subscription {subscription.id} with new order_id {order['id']}")
             else:
-                # Create new subscription
                 subscription = CourseSubscription.objects.create(
                     student=request.user,
                     course=course,
@@ -95,23 +159,39 @@ class CreateOrderView(views.APIView):
                     currency='INR'
                 )
                 logger.info(f"Created new subscription {subscription.id} for user {request.user.id}, course {course.id}")
-            
+
             return Response({
-                'order_id': order['id'],
-                'amount': order['amount'],
-                'currency': order['currency'],
-                'key': settings.RAZORPAY_KEY_ID,
-                'subscription_id': subscription.id
+                'message': 'Order created successfully.',
+                'data': {
+                    'order_id': order['id'],
+                    'amount': order['amount'],
+                    'currency': order['currency'],
+                    'key': settings.RAZORPAY_KEY_ID,
+                    'subscription_id': subscription.id
+                }
             }, status=status.HTTP_200_OK)
-            
+
+        except serializers.ValidationError as e:
+            return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
+        except Course.DoesNotExist:
+            return Response({
+                'error': 'Course not found or inactive.',
+                'status': status.HTTP_400_BAD_REQUEST
+            }, status=status.HTTP_400_BAD_REQUEST)
         except razorpay.errors.BadRequestError as e:
             logger.error(f"Razorpay error creating order: {str(e)}")
-            return Response({"error": f"Payment gateway error: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({
+                'error': f'Payment gateway error: {str(e)}',
+                'status': status.HTTP_400_BAD_REQUEST
+            }, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            logger.exception(f"Unexpected error creating order: {str(e)}")
-            return Response({"error": "Internal server error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            logger.error(f"Unexpected error creating order: {str(e)}")
+            return Response({
+                'error': 'Failed to create order. Please try again.',
+                'status': status.HTTP_500_INTERNAL_SERVER_ERROR
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-class VerifyPaymentView(views.APIView):
+class VerifyPaymentView(BaseAPIView):
     """Verifies Razorpay payment and updates subscription."""
     permission_classes = [IsAuthenticated, IsStudent]
 
@@ -124,56 +204,100 @@ class VerifyPaymentView(views.APIView):
                     type=openapi.TYPE_OBJECT,
                     properties={
                         'message': openapi.Schema(type=openapi.TYPE_STRING),
-                        'subscription_id': openapi.Schema(type=openapi.TYPE_INTEGER),
-                        'course_name': openapi.Schema(type=openapi.TYPE_STRING)
+                        'data': openapi.Schema(
+                            type=openapi.TYPE_OBJECT,
+                            properties={
+                                'subscription_id': openapi.Schema(type=openapi.TYPE_INTEGER),
+                                'course_name': openapi.Schema(type=openapi.TYPE_STRING)
+                            }
+                        )
                     }
                 )
             ),
-            400: "Bad Request",
-            404: "Subscription Not Found"
+            400: openapi.Response(
+                description="Invalid input",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'error': openapi.Schema(type=openapi.TYPE_STRING),
+                        'status': openapi.Schema(type=openapi.TYPE_INTEGER)
+                    }
+                )
+            ),
+            401: openapi.Response(
+                description="Unauthorized",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'error': openapi.Schema(type=openapi.TYPE_STRING),
+                        'status': openapi.Schema(type=openapi.TYPE_INTEGER)
+                    }
+                )
+            ),
+            403: openapi.Response(
+                description="Forbidden",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'error': openapi.Schema(type=openapi.TYPE_STRING),
+                        'status': openapi.Schema(type=openapi.TYPE_INTEGER)
+                    }
+                )
+            ),
+            500: openapi.Response(
+                description="Server error",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'error': openapi.Schema(type=openapi.TYPE_STRING),
+                        'status': openapi.Schema(type=openapi.TYPE_INTEGER)
+                    }
+                )
+            )
         }
     )
-    
     def post(self, request):
         """Verifies payment signature and updates subscription status."""
-        # Validate request data
-        serializer = VerifyPaymentSerializer(data=request.data, context={'request': request})
-        serializer.is_valid(raise_exception=True)
-        
-        payment_id = serializer.validated_data['razorpay_payment_id']
-        order_id = serializer.validated_data['razorpay_order_id']
-        signature = serializer.validated_data['razorpay_signature']
-        subscription = serializer.validated_data['subscription']
-        
-        # Handle idempotency for completed payments
-        if subscription.payment_status == 'completed':
-            logger.info(f"Payment already verified for subscription {subscription.id}, user {request.user.id}")
-            return Response({
-                "message": "Payment already verified",
-                "subscription_id": subscription.id,
-                "course_name": subscription.course.name
-            }, status=status.HTTP_200_OK)
-        
-        # Verify payment signature
-        params_dict = {
-            'razorpay_order_id': order_id,
-            'razorpay_payment_id': payment_id,
-            'razorpay_signature': signature
-        }
-        
-        if settings.DEBUG and settings.RAZORPAY_KEY_SECRET == 'fake_secret_for_testing':
-            logger.info(f"Skipping signature verification for subscription {subscription.id} in test mode")
-        else:
-            try:
-                client.utility.verify_payment_signature(params_dict)
-            except razorpay.errors.SignatureVerificationError as e:
-                logger.error(f"Signature verification failed for subscription {subscription.id}, user {request.user.id}: {str(e)}")
-                subscription.payment_status = 'failed'
-                subscription.save()
-                return Response({"error": "Invalid payment signature"}, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Update subscription details
         try:
+            serializer = self.validate_serializer(VerifyPaymentSerializer, request.data)
+            payment_id = serializer.validated_data['razorpay_payment_id']
+            order_id = serializer.validated_data['razorpay_order_id']
+            signature = serializer.validated_data['razorpay_signature']
+            subscription = serializer.validated_data['subscription']
+
+            # Handle idempotency for completed payments
+            if subscription.payment_status == 'completed':
+                logger.info(f"Payment already verified for subscription {subscription.id}, user {request.user.id}")
+                return Response({
+                    'message': 'Payment already verified.',
+                    'data': {
+                        'subscription_id': subscription.id,
+                        'course_name': subscription.course.name
+                    }
+                }, status=status.HTTP_200_OK)
+
+            # Verify payment signature
+            params_dict = {
+                'razorpay_order_id': order_id,
+                'razorpay_payment_id': payment_id,
+                'razorpay_signature': signature
+            }
+
+            if settings.DEBUG and settings.RAZORPAY_KEY_SECRET == 'fake_secret_for_testing':
+                logger.info(f"Skipping signature verification for subscription {subscription.id} in test mode")
+            else:
+                try:
+                    client.utility.verify_payment_signature(params_dict)
+                except razorpay.errors.SignatureVerificationError as e:
+                    logger.error(f"Signature verification failed for subscription {subscription.id}, user {request.user.id}: {str(e)}")
+                    subscription.payment_status = 'failed'
+                    subscription.save()
+                    return Response({
+                        'error': 'Invalid payment signature.',
+                        'status': status.HTTP_400_BAD_REQUEST
+                    }, status=status.HTTP_400_BAD_REQUEST)
+
+            # Update subscription details
             subscription.payment_id = payment_id
             subscription.payment_status = 'completed'
             subscription.payment_response = params_dict
@@ -182,11 +306,18 @@ class VerifyPaymentView(views.APIView):
             
             logger.info(f"Payment verified for subscription {subscription.id}, user {request.user.id}, course {subscription.course.name}")
             return Response({
-                "message": "Payment verified successfully",
-                "subscription_id": subscription.id,
-                "course_name": subscription.course.name
+                'message': 'Payment verified successfully.',
+                'data': {
+                    'subscription_id': subscription.id,
+                    'course_name': subscription.course.name
+                }
             }, status=status.HTTP_200_OK)
-            
+
+        except serializers.ValidationError as e:
+            return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            logger.exception(f"Error updating subscription {subscription.id} for user {request.user.id}: {str(e)}")
-            return Response({"error": "Internal server error"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            logger.error(f"Error updating subscription {subscription.id if 'subscription' in locals() else 'unknown'} for user {request.user.id}: {str(e)}")
+            return Response({
+                'error': 'Failed to verify payment. Please try again.',
+                'status': status.HTTP_500_INTERNAL_SERVER_ERROR
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
