@@ -1,5 +1,6 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
+from django.core.validators import MinValueValidator, MaxValueValidator
 from django.utils import timezone
 from django.conf import settings
 from datetime import timedelta
@@ -21,7 +22,7 @@ class User(AbstractUser):
     
     role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='student')
     email = models.EmailField(unique=True)
-    phone_number = models.CharField(max_length=15, unique=True)
+    phone_number = models.CharField(max_length=15, unique=True, null=True, blank=True)
     email_verified = models.BooleanField(default=False)
     phone_verified = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -53,6 +54,9 @@ class User(AbstractUser):
                 duration = timedelta(days=trial_settings.get('TRIAL_DURATION_MINUTES', 5))
             
             self.trial_end_date = timezone.now() + duration
+        
+        if self.phone_number == '':
+            self.phone_number = None
         
         super().save(*args, **kwargs)
     
@@ -121,6 +125,17 @@ class TeacherProfile(models.Model):
     resume = models.FileField(upload_to='teacher_resumes/', null=True, blank=True)
     is_verified = models.BooleanField(default=False, help_text="Verified by admin")
     teaching_languages = models.JSONField(default=list, blank=True)
+    course = models.CharField(max_length=100, blank=True)
+    batches = models.JSONField(default=list, blank=True)
+    weekdays_start_date = models.DateField(null=True, blank=True)
+    weekend_start_date = models.DateField(null=True, blank=True)
+    weekdays_start = models.CharField(max_length=20, blank=True)
+    weekdays_end = models.CharField(max_length=20, blank=True)
+    saturday_start = models.CharField(max_length=20, blank=True)
+    saturday_end = models.CharField(max_length=20, blank=True)
+    sunday_start = models.CharField(max_length=20, blank=True)
+    sunday_end = models.CharField(max_length=20, blank=True)
+    schedule = models.JSONField(default=list, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -134,6 +149,28 @@ class TeacherProfile(models.Model):
         """Returns teacher's full name or email."""
         return f"Teacher: {self.user.get_full_name() or self.user.email}"
 
+
+class StudentProfile(models.Model):
+    """Stores additional details for students."""
+    user = models.OneToOneField(
+        User, 
+        on_delete=models.CASCADE, 
+        related_name='student_profile',
+        limit_choices_to={'role': 'student'}
+    )
+    profile_picture = models.ImageField(upload_to='student_profiles/', null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'student_profiles'
+        verbose_name = 'Student Profile'
+        verbose_name_plural = 'Student Profiles'
+    
+    def __str__(self):
+        """Returns student's full name or email."""
+        return f"Student: {self.user.get_full_name() or self.user.email}"
 
 class OTP(models.Model):
     """Manages one-time passwords for email or phone verification."""

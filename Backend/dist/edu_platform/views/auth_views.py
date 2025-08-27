@@ -17,7 +17,7 @@ from edu_platform.serializers.auth_serializers import (
     UserSerializer, RegisterSerializer, LoginSerializer,
     TeacherCreateSerializer, ChangePasswordSerializer,
     SendOTPSerializer, VerifyOTPSerializer,
-    ForgotPasswordSerializer
+    ForgotPasswordSerializer, AdminCreateSerializer
 )
 import logging
 import phonenumbers
@@ -635,20 +635,20 @@ class TeacherRegisterView(generics.CreateAPIView):
     )
     def post(self, request, *args, **kwargs):
         """Creates a teacher user with JWT tokens."""
-        # Validate request data
         serializer = self.get_serializer(data=request.data)
         if not serializer.is_valid():
             error_message = 'Invalid teacher registration data.'
-            if 'username' in serializer.errors and isinstance(serializer.errors['username'], list):
-                error_message = serializer.errors['username'][0]
+            if 'name' in serializer.errors and isinstance(serializer.errors['name'], list):
+                error_message = serializer.errors['name'][0]
             elif 'email' in serializer.errors and isinstance(serializer.errors['email'], dict) and 'error' in serializer.errors['email']:
                 error_message = serializer.errors['email']['error']
-            elif 'phone_number' in serializer.errors and isinstance(serializer.errors['phone_number'], dict) and 'error' in serializer.errors['phone_number']:
-                error_message = serializer.errors['phone_number']['error']
+            elif 'phone' in serializer.errors and isinstance(serializer.errors['phone'], dict) and 'error' in serializer.errors['phone']:
+                error_message = serializer.errors['phone']['error']
             elif 'non_field_errors' in serializer.errors:
                 error_message = serializer.errors['non_field_errors'][0]
             elif serializer.errors:
                 error_message = list(serializer.errors.values())[0][0] if isinstance(list(serializer.errors.values())[0], list) else list(serializer.errors.values())[0]
+            logger.error(f"Teacher registration validation error: {error_message}")
             return Response({
                 'error': error_message,
                 'status': status.HTTP_400_BAD_REQUEST
@@ -671,10 +671,105 @@ class TeacherRegisterView(generics.CreateAPIView):
                 }
             }
             return Response(response_data, status=status.HTTP_201_CREATED)
+        except serializers.ValidationError as e:
+            logger.error(f"Teacher registration validation error: {str(e)}")
+            return Response({
+                'error': str(e),
+                'status': status.HTTP_400_BAD_REQUEST
+            }, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             logger.error(f"Teacher registration error: {str(e)}")
             return Response({
-                'error': 'Failed to register teacher. Please try again.',
+                'error': f'Failed to register teacher: {str(e)}',
+                'status': status.HTTP_500_INTERNAL_SERVER_ERROR
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+            
+class AdminRegisterView(generics.CreateAPIView):
+    """Registers a new admin user by admin."""
+    queryset = User.objects.all()
+    serializer_class = AdminCreateSerializer
+    permission_classes = [IsAuthenticated, IsAdmin]
+    
+    @swagger_auto_schema(
+        operation_description="Register a new admin account",
+        responses={
+            201: openapi.Response(
+                description="Admin registration successful",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'message': openapi.Schema(type=openapi.TYPE_STRING),
+                        'access': openapi.Schema(type=openapi.TYPE_STRING),
+                        'refresh': openapi.Schema(type=openapi.TYPE_STRING),
+                        'user': openapi.Schema(type=openapi.TYPE_OBJECT)
+                    }
+                )
+            ),
+            400: openapi.Response(
+                description="Invalid input",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'error': openapi.Schema(type=openapi.TYPE_STRING),
+                        'status': openapi.Schema(type=openapi.TYPE_INTEGER, description="HTTP status code")
+                    }
+                )
+            ),
+            500: openapi.Response(
+                description="Server error",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'error': openapi.Schema(type=openapi.TYPE_STRING),
+                        'status': openapi.Schema(type=openapi.TYPE_INTEGER, description="HTTP status code")
+                    }
+                )
+            )
+        }
+    )
+    def post(self, request, *args, **kwargs):
+        """Creates an admin user with JWT tokens."""
+        # Validate request data
+        serializer = self.get_serializer(data=request.data)
+        if not serializer.is_valid():
+            error_message = 'Invalid admin registration data.'
+            if 'username' in serializer.errors and isinstance(serializer.errors['username'], list):
+                error_message = serializer.errors['username'][0]
+            elif 'email' in serializer.errors and isinstance(serializer.errors['email'], dict) and 'error' in serializer.errors['email']:
+                error_message = serializer.errors['email']['error']
+            elif 'phone_number' in serializer.errors and isinstance(serializer.errors['phone_number'], dict) and 'error' in serializer.errors['phone_number']:
+                error_message = serializer.errors['phone_number']['error']
+            elif 'non_field_errors' in serializer.errors:
+                error_message = serializer.errors['non_field_errors'][0]
+            elif serializer.errors:
+                error_message = list(serializer.errors.values())[0][0] if isinstance(list(serializer.errors.values())[0], list) else list(serializer.errors.values())[0]
+            return Response({
+                'error': error_message,
+                'status': status.HTTP_400_BAD_REQUEST
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            user = serializer.save()
+            refresh = RefreshToken.for_user(user)
+            response_data = {
+                'message': 'Admin registration successful.',
+                'access': str(refresh.access_token),
+                'refresh': str(refresh),
+                'user': {
+                    'id': user.id,
+                    'username': user.username,
+                    'email': user.email,
+                    'role': user.role,
+                    'first_name': user.first_name,
+                    'last_name': user.last_name
+                }
+            }
+            return Response(response_data, status=status.HTTP_201_CREATED)
+        except Exception as e:
+            logger.error(f"Admin registration error: {str(e)}")
+            return Response({
+                'error': 'Failed to register admin. Please try again.',
                 'status': status.HTTP_500_INTERNAL_SERVER_ERROR
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 

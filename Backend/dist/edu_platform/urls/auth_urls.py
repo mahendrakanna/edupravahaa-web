@@ -4,7 +4,8 @@ from edu_platform.views.auth_views import (
     RegisterView, LoginView, LogoutView, ProfileView,
     TeacherRegisterView, ListTeachersView, ListStudentsView,
     ChangePasswordView, SendOTPView,
-    VerifyOTPView, ForgotPasswordView, TrialStatusView
+    VerifyOTPView, ForgotPasswordView, TrialStatusView,
+    AdminRegisterView
 )
 
 
@@ -27,6 +28,7 @@ urlpatterns = [
 
     # Admin endpoints
     path('register/teacher/', TeacherRegisterView.as_view(), name='register_teacher'),
+    path('register/admin/', AdminRegisterView.as_view(), name='register_admin'),
     path('admin/teachers/', ListTeachersView.as_view(), name='list_teachers'),
     path('admin/students/', ListStudentsView.as_view(), name='list_students'),
 ]

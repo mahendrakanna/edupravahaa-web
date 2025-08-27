@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.contrib.auth import authenticate, get_user_model
 from django.db.models import Q
-from edu_platform.models import User, TeacherProfile, OTP
+from edu_platform.models import User, TeacherProfile, OTP, StudentProfile
 import re
 from django.utils import timezone
 
@@ -52,22 +52,18 @@ def check_user_existence_utility(email=None, phone_number=None):
             'error': 'This email is already registered.'
         })
     if phone_number and User.objects.filter(phone_number=phone_number).exists():
-        if not re.match(r'^\+?\d{10,15}$', phone_number):
-            raise serializers.ValidationError({
-                'error': 'Invalid phone number. Must be 10-15 digits, optionally starting with +.'
-            })
-        else:
-            raise serializers.ValidationError({
-                'error': 'This phone number is already registered.'
-            })
+        raise serializers.ValidationError({
+            'error': 'This phone number is already registered.'
+        })
         
 class UserSerializer(serializers.ModelSerializer):
     """Serializes basic user data for retrieval and updates."""
+    profile = serializers.SerializerMethodField(read_only=True)
     class Meta:
         model = User
         fields = ['id', 'username', 'email', 'phone_number', 'first_name', 
                   'last_name', 'role', 'email_verified', 'phone_verified', 
-                  'date_joined']
+                  'date_joined', 'profile']
         read_only_fields = ['id', 'date_joined', 'email_verified', 'phone_verified']
 
     def validate_email(self, value):
@@ -76,6 +72,19 @@ class UserSerializer(serializers.ModelSerializer):
     def validate_phone_number(self, value):
         check_user_existence_utility(phone_number=value)
         return value
+
+    def get_profile(self, obj):
+        if obj.is_teacher:
+            try:
+                return TeacherProfileSerializer(obj.teacher_profile).data
+            except TeacherProfile.DoesNotExist:
+                return None
+        elif obj.is_student:
+            try:
+                return StudentProfileSerializer(obj.student_profile).data
+            except StudentProfile.DoesNotExist:
+                return None
+        return None
 
 class RegisterSerializer(serializers.Serializer):
     """Handles student user registration with email and phone verification."""
@@ -153,6 +162,7 @@ class RegisterSerializer(serializers.Serializer):
         )
         user.set_password(password)
         user.save()
+        StudentProfile.objects.create(user=user)
         
         # Delete used OTPs to prevent reuse
         OTP.objects.filter(
@@ -173,11 +183,26 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
     """Handles teacher user creation by admin."""
     password = serializers.CharField(write_only=True, min_length=8)
     confirm_password = serializers.CharField(write_only=True, required=True)
+    name = serializers.CharField(max_length=150, required=True)
+    course = serializers.CharField(max_length=100, required=True)
+    batch = serializers.ListField(child=serializers.CharField(), required=True)
+    weekdaysStartDate = serializers.DateField(required=False)
+    weekendStartDate = serializers.DateField(required=False)
+    weekdaysStart = serializers.CharField(max_length=20, required=False)
+    weekdaysEnd = serializers.CharField(max_length=20, required=False)
+    saturdayStart = serializers.CharField(max_length=20, required=False)
+    saturdayEnd = serializers.CharField(max_length=20, required=False)
+    sundayStart = serializers.CharField(max_length=20, required=False)
+    sundayEnd = serializers.CharField(max_length=20, required=False)
+    schedule = serializers.JSONField(required=True)
+    phone = serializers.CharField(source='phone_number', max_length=15, required=True, allow_blank=False)
 
     class Meta:
         model = User
-        fields = ['username', 'email', 'phone_number', 'password', 
-                  'confirm_password', 'first_name', 'last_name']
+        fields = ['name', 'course', 'batch', 'weekdaysStartDate', 'weekendStartDate', 
+                  'weekdaysStart', 'weekdaysEnd', 'saturdayStart', 'saturdayEnd', 
+                  'sundayStart', 'sundayEnd', 'email', 'phone', 'password', 
+                  'confirm_password', 'schedule']
     
     def validate_email(self, value):
         """Ensures email is not already registered."""
@@ -187,8 +212,12 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
             })
         return value
     
-    def validate_phone_number(self, value):
+    def validate_phone(self, value):
         """Ensures phone number is valid and not already registered."""
+        if not value:
+            raise serializers.ValidationError({
+                'error': 'Phone number is required for teachers.'
+            })
         if not re.match(r'^\+?\d{10,15}$', value):
             raise serializers.ValidationError({
                 'error': 'Invalid phone number. Must be 10-15 digits, optionally starting with +.'
@@ -213,13 +242,116 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
     
     def create(self, validated_data):
         """Creates a pre-verified teacher user."""
+        try:
+            name = validated_data.pop('name')
+            course = validated_data.pop('course')
+            batch = validated_data.pop('batch')
+            weekdaysStartDate = validated_data.pop('weekdaysStartDate', None)
+            weekendStartDate = validated_data.pop('weekendStartDate', None)
+            weekdaysStart = validated_data.pop('weekdaysStart', '')
+            weekdaysEnd = validated_data.pop('weekdaysEnd', '')
+            saturdayStart = validated_data.pop('saturdayStart', '')
+            saturdayEnd = validated_data.pop('saturdayEnd', '')
+            sundayStart = validated_data.pop('sundayStart', '')
+            sundayEnd = validated_data.pop('sundayEnd', '')
+            schedule = validated_data.pop('schedule')
+            
+            # Safely handle the phone field
+            phone = validated_data.pop('phone_number', None)  # Use 'phone_number' to match source
+            if phone is None:
+                raise serializers.ValidationError({
+                    'error': 'Phone number is required for teachers.'
+                })
+                
+            validated_data['phone_number'] = phone
+            validated_data['username'] = name
+            validated_data['first_name'] = name
+            validated_data.pop('confirm_password')
+            password = validated_data.pop('password')
+            
+            user = User.objects.create_user(
+                **validated_data,
+                role='teacher',
+                email_verified=True,
+                phone_verified=True
+            )
+            user.set_password(password)
+            user.save()
+            
+            TeacherProfile.objects.create(
+                user=user,
+                course=course,
+                batches=batch,
+                weekdays_start_date=weekdaysStartDate,
+                weekend_start_date=weekendStartDate,
+                weekdays_start=weekdaysStart,
+                weekdays_end=weekdaysEnd,
+                saturday_start=saturdayStart,
+                saturday_end=saturdayEnd,
+                sunday_start=sundayStart,
+                sunday_end=sundayEnd,
+                schedule=schedule
+            )
+            return user
+        except KeyError as e:
+            raise serializers.ValidationError({
+                'error': f'Missing required field: {str(e)}'
+            })
+        except Exception as e:
+            raise serializers.ValidationError({
+                'error': f'Failed to create teacher: {str(e)}'
+            })
+
+class AdminCreateSerializer(serializers.ModelSerializer):
+    """Handles admin user creation by admin."""
+    password = serializers.CharField(write_only=True, min_length=8)
+    confirm_password = serializers.CharField(write_only=True, required=True)
+    phone_number = serializers.CharField(max_length=15, required=False, allow_blank=True, allow_null=True)
+
+    class Meta:
+        model = User
+        fields = ['username', 'email', 'phone_number', 'password', 
+                  'confirm_password', 'first_name', 'last_name']
+    
+    def validate_email(self, value):
+        """Ensures email is not already registered."""
+        if User.objects.filter(email=value).exists():
+            raise serializers.ValidationError({
+                'error': 'This email is already registered.'
+            })
+        return value
+    
+    def validate_phone_number(self, value):
+        """Ensures phone number is valid and not already registered if provided."""
+        if value:
+            if not re.match(r'^\+?\d{10,15}$', value):
+                raise serializers.ValidationError({
+                    'error': 'Invalid phone number. Must be 10-15 digits, optionally starting with +.'
+                })
+            if User.objects.filter(phone_number=value).exists():
+                raise serializers.ValidationError({
+                    'error': 'This phone number is already registered.'
+                })
+        return value
+    
+    def validate(self, attrs):
+        """Ensures passwords match and only admins can create admins."""
+        if attrs['password'] != attrs['confirm_password']:
+            raise serializers.ValidationError({
+                'error': 'Passwords do not match.'
+            })
+        if not self.context['request'].user.is_superuser:
+            raise serializers.ValidationError({
+                'error': 'Only admins can create admin accounts.'
+            })
+        return attrs
+    
+    def create(self, validated_data):
+        """Creates a pre-verified admin user."""
         validated_data.pop('confirm_password')
         password = validated_data.pop('password')
-        user = User.objects.create_user(
+        user = User.objects.create_superuser(
             **validated_data,
-            role='teacher',
-            email_verified=True,
-            phone_verified=True
         )
         user.set_password(password)
         user.save()
@@ -460,7 +592,10 @@ class TeacherProfileSerializer(serializers.ModelSerializer):
         model = TeacherProfile
         fields = ['qualification', 'experience_years', 'specialization', 'bio', 
                   'profile_picture', 'linkedin_url', 'resume', 'is_verified', 
-                  'teaching_languages']
+                  'teaching_languages', 'course', 'batches', 'weekdays_start_date', 
+                  'weekend_start_date', 'weekdays_start', 'weekdays_end', 
+                  'saturday_start', 'saturday_end', 'sunday_start', 'sunday_end', 
+                  'schedule']
         read_only_fields = ['is_verified']
 
     def validate_experience_years(self, value):
@@ -494,3 +629,9 @@ class TeacherProfileSerializer(serializers.ModelSerializer):
                 'error': 'Invalid LinkedIn URL.'
             })
         return value
+
+class StudentProfileSerializer(serializers.ModelSerializer):
+    """Serializes student profile data."""
+    class Meta:
+        model = StudentProfile
+        fields = ['profile_picture']
