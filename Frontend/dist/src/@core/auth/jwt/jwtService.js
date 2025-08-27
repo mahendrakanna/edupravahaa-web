@@ -15,8 +15,7 @@ export default class JwtService {
   constructor(jwtOverrideConfig) {
     this.jwtConfig = { ...this.jwtConfig, ...jwtOverrideConfig }
 
-    console.log("jwtDefaultConfig",jwtDefaultConfig)
-    console.log("jwtConfig",this.jwtConfig)
+
 
     // ** Request Interceptor
     axios.interceptors.request.use(
