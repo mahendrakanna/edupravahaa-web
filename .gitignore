@@ -69,9 +69,10 @@ venv/
 .venv/
 env/
 ENV/
+edu_venv
 
 # Database
-*.sqlite3
+*.sqlite
 *.sqlite3-journal
 *.sql
 *.sql.gz
