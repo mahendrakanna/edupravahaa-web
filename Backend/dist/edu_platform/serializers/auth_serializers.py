@@ -30,6 +30,7 @@ def validate_identifier_utility(value, identifier_type=None):
             })
     return value, identifier_type
 
+
 def validate_password_utility(value):
     if not any(c.isupper() for c in value):
         raise serializers.ValidationError({
@@ -59,6 +60,7 @@ def check_user_existence_utility(email=None, phone_number=None):
 class UserSerializer(serializers.ModelSerializer):
     """Serializes basic user data for retrieval and updates."""
     profile = serializers.SerializerMethodField(read_only=True)
+    
     class Meta:
         model = User
         fields = ['id', 'username', 'email', 'phone_number', 'first_name', 
@@ -69,6 +71,7 @@ class UserSerializer(serializers.ModelSerializer):
     def validate_email(self, value):
         check_user_existence_utility(email=value)
         return value
+    
     def validate_phone_number(self, value):
         check_user_existence_utility(phone_number=value)
         return value
@@ -85,6 +88,7 @@ class UserSerializer(serializers.ModelSerializer):
             except StudentProfile.DoesNotExist:
                 return None
         return None
+
 
 class RegisterSerializer(serializers.Serializer):
     """Handles student user registration with email and phone verification."""
@@ -179,22 +183,23 @@ class RegisterSerializer(serializers.Serializer):
         
         return user
 
+
 class TeacherCreateSerializer(serializers.ModelSerializer):
     """Handles teacher user creation by admin."""
     password = serializers.CharField(write_only=True, min_length=8)
     confirm_password = serializers.CharField(write_only=True, required=True)
-    name = serializers.CharField(max_length=150, required=True)
-    course = serializers.CharField(max_length=100, required=True)
-    batch = serializers.ListField(child=serializers.CharField(), required=True)
-    weekdaysStartDate = serializers.DateField(required=False)
-    weekendStartDate = serializers.DateField(required=False)
-    weekdaysStart = serializers.CharField(max_length=20, required=False)
-    weekdaysEnd = serializers.CharField(max_length=20, required=False)
-    saturdayStart = serializers.CharField(max_length=20, required=False)
-    saturdayEnd = serializers.CharField(max_length=20, required=False)
-    sundayStart = serializers.CharField(max_length=20, required=False)
-    sundayEnd = serializers.CharField(max_length=20, required=False)
-    schedule = serializers.JSONField(required=True)
+    name = serializers.CharField(max_length=150, required=True, allow_blank=False)
+    course = serializers.CharField(max_length=100, required=True, allow_blank=False)
+    batch = serializers.ListField(child=serializers.CharField(), required=True, allow_empty=False)
+    weekdaysStartDate = serializers.DateField(required=False, allow_null=True)
+    weekendStartDate = serializers.DateField(required=False, allow_null=True)
+    weekdaysStart = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    weekdaysEnd = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    saturdayStart = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    saturdayEnd = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    sundayStart = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    sundayEnd = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    schedule = serializers.JSONField(required=True, allow_null=False)
     phone = serializers.CharField(source='phone_number', max_length=15, required=True, allow_blank=False)
 
     class Meta:
@@ -204,8 +209,44 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
                   'sundayStart', 'sundayEnd', 'email', 'phone', 'password', 
                   'confirm_password', 'schedule']
     
+    def validate_name(self, value):
+        """Ensures name is not blank."""
+        if not value.strip():
+            raise serializers.ValidationError({
+                'error': 'Name is required and cannot be blank.'
+            })
+        return value
+    
+    def validate_course(self, value):
+        """Ensures course is not blank."""
+        if not value.strip():
+            raise serializers.ValidationError({
+                'error': 'Course is required and cannot be blank.'
+            })
+        return value
+    
+    def validate_batch(self, value):
+        """Ensures batch is a non-empty list."""
+        if not value or not isinstance(value, list):
+            raise serializers.ValidationError({
+                'error': 'Batch must be a non-empty list of batch names.'
+            })
+        return value
+    
+    def validate_schedule(self, value):
+        """Ensures schedule is a non-empty JSON object."""
+        if not value or not isinstance(value, (list, dict)):
+            raise serializers.ValidationError({
+                'error': 'Schedule must be a non-empty JSON object or list.'
+            })
+        return value
+    
     def validate_email(self, value):
-        """Ensures email is not already registered."""
+        """Ensures email is not blank and not already registered."""
+        if not value.strip():
+            raise serializers.ValidationError({
+                'error': 'Email is required and cannot be blank.'
+            })
         if User.objects.filter(email=value).exists():
             raise serializers.ValidationError({
                 'error': 'This email is already registered.'
@@ -214,9 +255,9 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
     
     def validate_phone(self, value):
         """Ensures phone number is valid and not already registered."""
-        if not value:
+        if not value.strip():
             raise serializers.ValidationError({
-                'error': 'Phone number is required for teachers.'
+                'error': 'Phone number is required and cannot be blank.'
             })
         if not re.match(r'^\+?\d{10,15}$', value):
             raise serializers.ValidationError({
@@ -228,15 +269,15 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
             })
         return value
     
+    def validate_password(self, value):
+        """Validates password strength."""
+        return validate_password_utility(value)
+    
     def validate(self, attrs):
-        """Ensures passwords match and only admins can create teachers."""
+        """Ensures passwords match."""
         if attrs['password'] != attrs['confirm_password']:
             raise serializers.ValidationError({
                 'error': 'Passwords do not match.'
-            })
-        if not self.context['request'].user.is_superuser:
-            raise serializers.ValidationError({
-                'error': 'Only admins can create teacher accounts.'
             })
         return attrs
     
@@ -256,13 +297,7 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
             sundayEnd = validated_data.pop('sundayEnd', '')
             schedule = validated_data.pop('schedule')
             
-            # Safely handle the phone field
-            phone = validated_data.pop('phone_number', None)  # Use 'phone_number' to match source
-            if phone is None:
-                raise serializers.ValidationError({
-                    'error': 'Phone number is required for teachers.'
-                })
-                
+            phone = validated_data.pop('phone_number')
             validated_data['phone_number'] = phone
             validated_data['username'] = name
             validated_data['first_name'] = name
@@ -302,19 +337,34 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
                 'error': f'Failed to create teacher: {str(e)}'
             })
 
+
 class AdminCreateSerializer(serializers.ModelSerializer):
-    """Handles admin user creation by admin."""
+    """Handles admin user creation by any user."""
     password = serializers.CharField(write_only=True, min_length=8)
     confirm_password = serializers.CharField(write_only=True, required=True)
     phone_number = serializers.CharField(max_length=15, required=False, allow_blank=True, allow_null=True)
+    username = serializers.CharField(max_length=150, required=True, allow_blank=False)
+    email = serializers.EmailField(required=True, allow_blank=False)
 
     class Meta:
         model = User
         fields = ['username', 'email', 'phone_number', 'password', 
                   'confirm_password', 'first_name', 'last_name']
     
+    def validate_username(self, value):
+        """Ensures username is not blank."""
+        if not value.strip():
+            raise serializers.ValidationError({
+                'error': 'Username is required and cannot be blank.'
+            })
+        return value
+    
     def validate_email(self, value):
-        """Ensures email is not already registered."""
+        """Ensures email is not blank and not already registered."""
+        if not value.strip():
+            raise serializers.ValidationError({
+                'error': 'Email is required and cannot be blank.'
+            })
         if User.objects.filter(email=value).exists():
             raise serializers.ValidationError({
                 'error': 'This email is already registered.'
@@ -334,15 +384,15 @@ class AdminCreateSerializer(serializers.ModelSerializer):
                 })
         return value
     
+    def validate_password(self, value):
+        """Validates password strength."""
+        return validate_password_utility(value)
+    
     def validate(self, attrs):
-        """Ensures passwords match and only admins can create admins."""
+        """Ensures passwords match."""
         if attrs['password'] != attrs['confirm_password']:
             raise serializers.ValidationError({
                 'error': 'Passwords do not match.'
-            })
-        if not self.context['request'].user.is_superuser:
-            raise serializers.ValidationError({
-                'error': 'Only admins can create admin accounts.'
             })
         return attrs
     
@@ -391,6 +441,7 @@ class ChangePasswordSerializer(serializers.Serializer):
         user.save()
         return user
 
+
 class LoginSerializer(serializers.Serializer):
     """Handles user login with email, phone, or username."""
     identifier = serializers.CharField()
@@ -434,6 +485,7 @@ class LoginSerializer(serializers.Serializer):
         attrs['user'] = user
         return attrs
 
+
 class SendOTPSerializer(serializers.Serializer):
     """Sends OTP to email or phone with auto-detection."""
     identifier = serializers.CharField(help_text="Email address or phone number")
@@ -474,6 +526,7 @@ class SendOTPSerializer(serializers.Serializer):
         
         return attrs
 
+
 class VerifyOTPSerializer(serializers.Serializer):
     """Verifies OTP with auto-detection of identifier type."""
     identifier = serializers.CharField(help_text="Email address or phone number")
@@ -513,6 +566,7 @@ class VerifyOTPSerializer(serializers.Serializer):
         
         attrs['otp'] = otp
         return attrs
+
 
 class ForgotPasswordSerializer(serializers.Serializer):
     """Resets password using OTP verification."""
@@ -586,6 +640,7 @@ class ForgotPasswordSerializer(serializers.Serializer):
         otp.save()
         return user
 
+
 class TeacherProfileSerializer(serializers.ModelSerializer):
     """Serializes teacher profile data."""
     class Meta:
@@ -629,6 +684,7 @@ class TeacherProfileSerializer(serializers.ModelSerializer):
                 'error': 'Invalid LinkedIn URL.'
             })
         return value
+
 
 class StudentProfileSerializer(serializers.ModelSerializer):
     """Serializes student profile data."""

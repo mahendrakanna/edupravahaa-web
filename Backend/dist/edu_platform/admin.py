@@ -1,7 +1,9 @@
 from django.contrib import admin
-from .models import User, OTP, Course, CourseSubscription
+from .models import User, OTP, Course, CourseSubscription, TeacherProfile, StudentProfile
 # Register your models here.
 admin.site.register(User)
+admin.site.register(TeacherProfile)
+admin.site.register(StudentProfile)
 admin.site.register(OTP)
 admin.site.register(Course)
 admin.site.register(CourseSubscription)

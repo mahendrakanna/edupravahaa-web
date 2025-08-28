@@ -159,6 +159,7 @@ class SendOTPView(generics.GenericAPIView):
                 response_data['debug_otp'] = otp.otp_code
             return Response(response_data, status=status.HTTP_200_OK)
 
+
 class VerifyOTPView(generics.GenericAPIView):
     """Verifies OTP for email or phone."""
     permission_classes = [AllowAny]
@@ -341,6 +342,7 @@ class RegisterView(generics.CreateAPIView):
         
         return Response(response_data, status=status.HTTP_201_CREATED)
 
+
 class LoginView(generics.GenericAPIView):
     """Handles user login with JWT token generation."""
     permission_classes = [AllowAny]
@@ -451,6 +453,7 @@ class LoginView(generics.GenericAPIView):
                 'status': status.HTTP_500_INTERNAL_SERVER_ERROR
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
 class LogoutView(generics.GenericAPIView):
     """Logs out user by blacklisting refresh token."""
     permission_classes = [IsAuthenticated]
@@ -506,6 +509,7 @@ class LogoutView(generics.GenericAPIView):
                 'error': 'Invalid refresh token.',
                 'status': status.HTTP_400_BAD_REQUEST
             }, status=status.HTTP_400_BAD_REQUEST)
+
 
 class ProfileView(generics.RetrieveUpdateAPIView):
     """Manages retrieval and updates of user profile."""
@@ -597,7 +601,7 @@ class TeacherRegisterView(generics.CreateAPIView):
     permission_classes = [IsAuthenticated, IsAdmin]
     
     @swagger_auto_schema(
-        operation_description="Register a new teacher account",
+        operation_description="Register a new teacher account by admin",
         responses={
             201: openapi.Response(
                 description="Teacher registration successful",
@@ -607,7 +611,25 @@ class TeacherRegisterView(generics.CreateAPIView):
                         'message': openapi.Schema(type=openapi.TYPE_STRING),
                         'access': openapi.Schema(type=openapi.TYPE_STRING),
                         'refresh': openapi.Schema(type=openapi.TYPE_STRING),
-                        'user': openapi.Schema(type=openapi.TYPE_OBJECT)
+                        'user': openapi.Schema(
+                            type=openapi.TYPE_OBJECT,
+                            properties={
+                                'name': openapi.Schema(type=openapi.TYPE_STRING),
+                                'course': openapi.Schema(type=openapi.TYPE_STRING),
+                                'batch': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Items(type=openapi.TYPE_STRING)),
+                                'weekdaysStartDate': openapi.Schema(type=openapi.TYPE_STRING, format='date', nullable=True),
+                                'weekendStartDate': openapi.Schema(type=openapi.TYPE_STRING, format='date', nullable=True),
+                                'weekdaysStart': openapi.Schema(type=openapi.TYPE_STRING, nullable=True),
+                                'weekdaysEnd': openapi.Schema(type=openapi.TYPE_STRING, nullable=True),
+                                'saturdayStart': openapi.Schema(type=openapi.TYPE_STRING, nullable=True),
+                                'saturdayEnd': openapi.Schema(type=openapi.TYPE_STRING, nullable=True),
+                                'sundayStart': openapi.Schema(type=openapi.TYPE_STRING, nullable=True),
+                                'sundayEnd': openapi.Schema(type=openapi.TYPE_STRING, nullable=True),
+                                'email': openapi.Schema(type=openapi.TYPE_STRING),
+                                'phone': openapi.Schema(type=openapi.TYPE_STRING),
+                                'schedule': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Items(type=openapi.TYPE_OBJECT))
+                            }
+                        )
                     }
                 )
             ),
@@ -617,7 +639,8 @@ class TeacherRegisterView(generics.CreateAPIView):
                     type=openapi.TYPE_OBJECT,
                     properties={
                         'error': openapi.Schema(type=openapi.TYPE_STRING),
-                        'status': openapi.Schema(type=openapi.TYPE_INTEGER, description="HTTP status code")
+                        'status': openapi.Schema(type=openapi.TYPE_INTEGER, description="HTTP status code"),
+                        'errors': openapi.Schema(type=openapi.TYPE_OBJECT, description="Detailed field errors")
                     }
                 )
             ),
@@ -634,48 +657,73 @@ class TeacherRegisterView(generics.CreateAPIView):
         }
     )
     def post(self, request, *args, **kwargs):
-        """Creates a teacher user with JWT tokens."""
+        """Creates a teacher user with JWT tokens and returns all provided data."""
         serializer = self.get_serializer(data=request.data)
         if not serializer.is_valid():
+            errors = serializer.errors
             error_message = 'Invalid teacher registration data.'
-            if 'name' in serializer.errors and isinstance(serializer.errors['name'], list):
-                error_message = serializer.errors['name'][0]
-            elif 'email' in serializer.errors and isinstance(serializer.errors['email'], dict) and 'error' in serializer.errors['email']:
-                error_message = serializer.errors['email']['error']
-            elif 'phone' in serializer.errors and isinstance(serializer.errors['phone'], dict) and 'error' in serializer.errors['phone']:
-                error_message = serializer.errors['phone']['error']
-            elif 'non_field_errors' in serializer.errors:
-                error_message = serializer.errors['non_field_errors'][0]
-            elif serializer.errors:
-                error_message = list(serializer.errors.values())[0][0] if isinstance(list(serializer.errors.values())[0], list) else list(serializer.errors.values())[0]
-            logger.error(f"Teacher registration validation error: {error_message}")
+            detailed_errors = {}
+            
+            # Extract specific field errors
+            for field, error in errors.items():
+                if isinstance(error, list):
+                    detailed_errors[field] = error[0]
+                elif isinstance(error, dict) and 'error' in error:
+                    detailed_errors[field] = error['error']
+                else:
+                    detailed_errors[field] = str(error)
+            
+            # Fallback to generic message if no specific field error
+            if not detailed_errors:
+                if 'non_field_errors' in errors:
+                    error_message = errors['non_field_errors'][0]
+                elif errors:
+                    error_message = list(errors.values())[0][0] if isinstance(list(errors.values())[0], list) else list(errors.values())[0]
+            
+            logger.error(f"Teacher registration validation error: {detailed_errors or error_message}")
             return Response({
                 'error': error_message,
-                'status': status.HTTP_400_BAD_REQUEST
+                'status': status.HTTP_400_BAD_REQUEST,
+                'errors': detailed_errors
             }, status=status.HTTP_400_BAD_REQUEST)
         
         try:
             user = serializer.save()
             refresh = RefreshToken.for_user(user)
+            # Prepare response with all validated data
             response_data = {
                 'message': 'Teacher registration successful.',
                 'access': str(refresh.access_token),
                 'refresh': str(refresh),
                 'user': {
-                    'id': user.id,
-                    'username': user.username,
-                    'email': user.email,
-                    'role': user.role,
-                    'first_name': user.first_name,
-                    'last_name': user.last_name
+                    'name': serializer.validated_data['name'],
+                    'course': serializer.validated_data['course'],
+                    'batch': serializer.validated_data['batch'],
+                    'weekdaysStartDate': serializer.validated_data.get('weekdaysStartDate', None),
+                    'weekendStartDate': serializer.validated_data.get('weekendStartDate', None),
+                    'weekdaysStart': serializer.validated_data.get('weekdaysStart', ''),
+                    'weekdaysEnd': serializer.validated_data.get('weekdaysEnd', ''),
+                    'saturdayStart': serializer.validated_data.get('saturdayStart', ''),
+                    'saturdayEnd': serializer.validated_data.get('saturdayEnd', ''),
+                    'sundayStart': serializer.validated_data.get('sundayStart', ''),
+                    'sundayEnd': serializer.validated_data.get('sundayEnd', ''),
+                    'email': serializer.validated_data['email'],
+                    'phone': serializer.validated_data['phone_number'],
+                    'schedule': serializer.validated_data['schedule']
                 }
             }
+            # Convert dates to ISO format if present
+            if response_data['user']['weekdaysStartDate']:
+                response_data['user']['weekdaysStartDate'] = response_data['user']['weekdaysStartDate'].isoformat()
+            if response_data['user']['weekendStartDate']:
+                response_data['user']['weekendStartDate'] = response_data['user']['weekendStartDate'].isoformat()
             return Response(response_data, status=status.HTTP_201_CREATED)
         except serializers.ValidationError as e:
             logger.error(f"Teacher registration validation error: {str(e)}")
             return Response({
                 'error': str(e),
-                'status': status.HTTP_400_BAD_REQUEST
+                'status': status.HTTP_400_BAD_REQUEST,
+                'errors': {}
             }, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             logger.error(f"Teacher registration error: {str(e)}")
@@ -686,13 +734,13 @@ class TeacherRegisterView(generics.CreateAPIView):
 
             
 class AdminRegisterView(generics.CreateAPIView):
-    """Registers a new admin user by admin."""
+    """Registers a new admin user by any user (including unauthorized)."""
     queryset = User.objects.all()
     serializer_class = AdminCreateSerializer
-    permission_classes = [IsAuthenticated, IsAdmin]
+    permission_classes = [AllowAny]
     
     @swagger_auto_schema(
-        operation_description="Register a new admin account",
+        operation_description="Register a new admin account (accessible to all users, including unauthorized)",
         responses={
             201: openapi.Response(
                 description="Admin registration successful",
@@ -712,7 +760,8 @@ class AdminRegisterView(generics.CreateAPIView):
                     type=openapi.TYPE_OBJECT,
                     properties={
                         'error': openapi.Schema(type=openapi.TYPE_STRING),
-                        'status': openapi.Schema(type=openapi.TYPE_INTEGER, description="HTTP status code")
+                        'status': openapi.Schema(type=openapi.TYPE_INTEGER, description="HTTP status code"),
+                        'errors': openapi.Schema(type=openapi.TYPE_OBJECT, description="Detailed field errors")
                     }
                 )
             ),
@@ -730,23 +779,33 @@ class AdminRegisterView(generics.CreateAPIView):
     )
     def post(self, request, *args, **kwargs):
         """Creates an admin user with JWT tokens."""
-        # Validate request data
         serializer = self.get_serializer(data=request.data)
         if not serializer.is_valid():
+            errors = serializer.errors
             error_message = 'Invalid admin registration data.'
-            if 'username' in serializer.errors and isinstance(serializer.errors['username'], list):
-                error_message = serializer.errors['username'][0]
-            elif 'email' in serializer.errors and isinstance(serializer.errors['email'], dict) and 'error' in serializer.errors['email']:
-                error_message = serializer.errors['email']['error']
-            elif 'phone_number' in serializer.errors and isinstance(serializer.errors['phone_number'], dict) and 'error' in serializer.errors['phone_number']:
-                error_message = serializer.errors['phone_number']['error']
-            elif 'non_field_errors' in serializer.errors:
-                error_message = serializer.errors['non_field_errors'][0]
-            elif serializer.errors:
-                error_message = list(serializer.errors.values())[0][0] if isinstance(list(serializer.errors.values())[0], list) else list(serializer.errors.values())[0]
+            detailed_errors = {}
+            
+            # Extract specific field errors
+            for field, error in errors.items():
+                if isinstance(error, list):
+                    detailed_errors[field] = error[0]
+                elif isinstance(error, dict) and 'error' in error:
+                    detailed_errors[field] = error['error']
+                else:
+                    detailed_errors[field] = str(error)
+            
+            # Fallback to generic message if no specific field error
+            if not detailed_errors:
+                if 'non_field_errors' in errors:
+                    error_message = errors['non_field_errors'][0]
+                elif errors:
+                    error_message = list(errors.values())[0][0] if isinstance(list(errors.values())[0], list) else list(errors.values())[0]
+            
+            logger.error(f"Admin registration validation error: {detailed_errors or error_message}")
             return Response({
                 'error': error_message,
-                'status': status.HTTP_400_BAD_REQUEST
+                'status': status.HTTP_400_BAD_REQUEST,
+                'errors': detailed_errors
             }, status=status.HTTP_400_BAD_REQUEST)
         
         try:
@@ -772,6 +831,7 @@ class AdminRegisterView(generics.CreateAPIView):
                 'error': 'Failed to register admin. Please try again.',
                 'status': status.HTTP_500_INTERNAL_SERVER_ERROR
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 class ListTeachersView(generics.ListAPIView):
     """Lists all teacher users for admin."""
@@ -946,6 +1006,7 @@ class ChangePasswordView(generics.UpdateAPIView):
         """Returns the authenticated user."""
         return self.request.user
 
+
 class ForgotPasswordView(generics.GenericAPIView):
     """Resets password using OTP."""
     permission_classes = [AllowAny]
@@ -1015,6 +1076,7 @@ class ForgotPasswordView(generics.GenericAPIView):
                 'error': 'Failed to reset password. Please try again.',
                 'status': status.HTTP_500_INTERNAL_SERVER_ERROR
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 class TrialStatusView(generics.GenericAPIView):
     """Retrieves trial status for authenticated student users."""
