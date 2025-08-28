@@ -1,6 +1,7 @@
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import axios from 'axios';
 import apiList from '../../api.json'
+import api from "../utility/api"
 
 const API_URL = import.meta.env.VITE_API_BASE_URL;
 
@@ -10,11 +11,11 @@ export const signupUser = createAsyncThunk(
   async (userData, { rejectWithValue }) => {
     try {
       const response = await axios.post(API_URL + apiList.auth.signup, userData);
-      console.log("Response Data:", response.data);
+      // console.log("Response Data:", response.data);
 
       return response.data;
     } catch (err) {
-        console.error("Error during signup:", err);
+        // console.error("Error during signup:", err);
       return rejectWithValue(err.response?.data || err.message);
     }
   }
@@ -111,7 +112,7 @@ export const logoutUser = createAsyncThunk(
       const { auth } = getState();
       const refreshToken = auth.refreshToken;
       const accessToken = auth.token;
-      console.log("acc",accessToken)
+      // console.log("acc",accessToken)
 
       const response = await axios.post(
         API_URL + apiList.auth.logout,
@@ -131,7 +132,7 @@ export const logoutUser = createAsyncThunk(
   }
 );
 
-// refresh token api 
+// refresh token api
 export const refreshTokenThunk = createAsyncThunk(
   'auth/refreshToken',
   async (_, { rejectWithValue, getState }) => {
@@ -143,18 +144,20 @@ export const refreshTokenThunk = createAsyncThunk(
         return rejectWithValue('No refresh token found');
       }
 
+      // ⚡ use plain axios, not `api`
       const response = await axios.post(
-        API_URL + apiList.auth.refresh,  
+        API_URL + apiList.auth.refresh,
         { refresh: refreshToken },
         { headers: { 'Content-Type': 'application/json' } }
       );
 
-      return response.data;
+      return response.data; // { access: "...", refresh?: "..." }
     } catch (err) {
       return rejectWithValue(err.response?.data || err.message);
     }
   }
 );
+
 
 
 
@@ -214,7 +217,7 @@ const authSlice = createSlice({
       state.error = null;
     });
     builder.addCase(loginUser.fulfilled, (state, action) => {
-      console.log("Login successful:", action.payload);
+      // console.log("Login successful:", action.payload);
 
       state.loading = false;
 
@@ -299,6 +302,9 @@ const authSlice = createSlice({
     builder.addCase(logoutUser.rejected, (state, action) => {
       state.loading = false;
       state.error = action.payload;
+      localStorage.removeItem('access');
+      localStorage.removeItem('refresh');
+      localStorage.removeItem('userData');
     });
 
     // refresh token api 
@@ -309,12 +315,13 @@ const authSlice = createSlice({
     builder.addCase(refreshTokenThunk.fulfilled, (state, action) => {
       state.loading = false;
       state.token = action.payload.access;
+
+      localStorage.setItem('access', action.payload.access);
+
       if (action.payload.refresh) {
         state.refreshToken = action.payload.refresh; 
         localStorage.setItem('refresh', action.payload.refresh);
       }
-
-      localStorage.setItem('access', action.payload.access);
     });
     builder.addCase(refreshTokenThunk.rejected, (state, action) => {
       state.loading = false;
