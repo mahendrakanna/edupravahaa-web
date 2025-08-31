@@ -3,7 +3,7 @@ from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
 from django.utils import timezone
 from django.conf import settings
-from datetime import timedelta
+from datetime import timedelta, datetime, date
 from django.utils.text import slugify
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator, MaxValueValidator
@@ -27,6 +27,7 @@ class User(AbstractUser):
     phone_verified = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    last_login = models.DateTimeField(null=True, blank=True)
 
     trial_end_date = models.DateTimeField(null=True, blank=True)
     has_purchased_courses = models.BooleanField(default=False)
@@ -125,17 +126,6 @@ class TeacherProfile(models.Model):
     resume = models.FileField(upload_to='teacher_resumes/', null=True, blank=True)
     is_verified = models.BooleanField(default=False, help_text="Verified by admin")
     teaching_languages = models.JSONField(default=list, blank=True)
-    course = models.CharField(max_length=100, blank=True)
-    batches = models.JSONField(default=list, blank=True)
-    weekdays_start_date = models.DateField(null=True, blank=True)
-    weekend_start_date = models.DateField(null=True, blank=True)
-    weekdays_start = models.CharField(max_length=20, blank=True)
-    weekdays_end = models.CharField(max_length=20, blank=True)
-    saturday_start = models.CharField(max_length=20, blank=True)
-    saturday_end = models.CharField(max_length=20, blank=True)
-    sunday_start = models.CharField(max_length=20, blank=True)
-    sunday_end = models.CharField(max_length=20, blank=True)
-    schedule = models.JSONField(default=list, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -266,7 +256,7 @@ class Course(models.Model):
         super().save(*args, **kwargs)
 
 
-#--------Subcription models---------#
+#--------Subscription models---------#
 class CourseSubscription(models.Model):
     """Tracks student course purchases with lifetime access."""
     PAYMENT_STATUS = (
@@ -356,74 +346,62 @@ class CourseSubscription(models.Model):
 
 #--------Class models---------#
 class ClassSchedule(models.Model):
-    """Manages schedules for course classes led by teachers."""
-    STATUS_CHOICES = (
-        ('scheduled', 'Scheduled'),
-        ('live', 'Live'),
-        ('completed', 'Completed'),
-        ('cancelled', 'Cancelled'),
+    """Represents a specific schedule for a teacher-course pair."""
+    teacher = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='class_schedules',
+        limit_choices_to={'role': 'teacher'}
     )
-    
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     course = models.ForeignKey(
         Course,
         on_delete=models.CASCADE,
         related_name='class_schedules'
     )
-    teacher = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name='scheduled_classes'
-    )
-    title = models.CharField(max_length=200)
-    description = models.TextField(blank=True)
-    scheduled_date = models.DateField()
-    scheduled_time = models.TimeField()
-    duration_minutes = models.IntegerField(default=60)
-    status = models.CharField(
-        max_length=20,
-        choices=STATUS_CHOICES,
-        default='scheduled'
-    )
-    meeting_room_id = models.CharField(max_length=100, unique=True, blank=True)
+    batches = models.JSONField(default=list)
+    schedule = models.JSONField(default=list)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
         db_table = 'class_schedules'
-        ordering = ['scheduled_date', 'scheduled_time']
+        unique_together = ['teacher', 'course']
+        ordering = ['-created_at']
         
     def __str__(self):
-        """Returns class title with scheduled date and time."""
-        return f"{self.title} - {self.scheduled_date} {self.scheduled_time}"
-    
-    def save(self, *args, **kwargs):
-        """Generates unique meeting room ID if not provided."""
-        # Auto-generate meeting room ID based on class ID
-        if not self.meeting_room_id:
-            self.meeting_room_id = f"room_{self.id}"
-        super().save(*args, **kwargs)
+        return f"{self.course.name} - {self.teacher.email}"
 
-class ClassAttendance(models.Model):
-    """Tracks student attendance for scheduled classes."""
-    class_schedule = models.ForeignKey(
-        ClassSchedule,
-        on_delete=models.CASCADE,
-        related_name='attendances'
-    )
+
+#--------Enrollment models---------#
+class CourseEnrollment(models.Model):
+    """Tracks student enrollment in a specific course batch."""
     student = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
-        related_name='class_attendances'
+        related_name='enrollments',
+        limit_choices_to={'role': 'student'}
     )
-    joined_at = models.DateTimeField(auto_now_add=True)
-    left_at = models.DateTimeField(null=True, blank=True)
-    duration_minutes = models.IntegerField(default=0)
+    course = models.ForeignKey(
+        'Course',
+        on_delete=models.PROTECT,
+        related_name='enrollments'
+    )
+    batch = models.CharField(max_length=100, help_text="Selected batch (weekdays or weekends)")
+    subscription = models.ForeignKey(
+        CourseSubscription,
+        on_delete=models.CASCADE,
+        related_name='enrollments'
+    )
+    enrolled_at = models.DateTimeField(auto_now_add=True)
     
     class Meta:
-        db_table = 'class_attendances'
-        unique_together = ['class_schedule', 'student']
-        
+        db_table = 'course_enrollments'
+        unique_together = ['student', 'course', 'batch']
+        indexes = [
+            models.Index(fields=['student', 'course']),
+            models.Index(fields=['course', 'batch']),
+        ]
+    
     def __str__(self):
-        """Returns student email and class title."""
-        return f"{self.student.email} - {self.class_schedule.title}"
+        """Returns student email, course name, and batch."""
+        return f"{self.student.email} - {self.course.name} ({self.batch})"

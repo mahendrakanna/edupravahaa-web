@@ -1,18 +1,20 @@
 from rest_framework import serializers
-from edu_platform.models import Course, CourseSubscription
+from edu_platform.models import Course, CourseSubscription, ClassSchedule, CourseEnrollment
 
 
 class CourseSerializer(serializers.ModelSerializer):
     """Serializes course data for retrieval and updates."""
+    schedule = serializers.SerializerMethodField(read_only=True)
+    batches = serializers.SerializerMethodField(read_only=True)
+    
     class Meta:
         model = Course
         fields = [
             'id', 'name', 'slug', 'description', 'category', 'level',
             'thumbnail', 'duration_hours', 'base_price', 'advantages',
-            'is_active', 'created_at', 'updated_at'
+            'batches', 'schedule', 'is_active', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'slug', 'created_at', 'updated_at']
-        # Allow partial updates for PUT requests
+        read_only_fields = ['id', 'slug', 'created_at', 'updated_at', 'batches', 'schedule']
         extra_kwargs = {
             'description': {'required': False},
             'category': {'required': False},
@@ -21,7 +23,6 @@ class CourseSerializer(serializers.ModelSerializer):
             'duration_hours': {'required': False},
             'base_price': {'required': False},
             'advantages': {'required': False},
-            'is_active': {'required': False}
         }
 
     def __init__(self, *args, **kwargs):
@@ -58,13 +59,35 @@ class CourseSerializer(serializers.ModelSerializer):
             })
         return value
 
+    def get_batches(self, obj):
+        """Aggregates unique batches from all ClassSchedules for the course."""
+        schedules = ClassSchedule.objects.filter(course=obj)
+        all_batches = set()
+        for schedule in schedules:
+            all_batches.update(schedule.batches)
+        return list(all_batches)
+
+    def get_schedule(self, obj):
+        """Aggregates all schedule entries from all ClassSchedules for the course."""
+        schedules = ClassSchedule.objects.filter(course=obj)
+        all_schedules = []
+        for schedule in schedules:
+            all_schedules.extend(schedule.schedule)
+        return all_schedules
+
 
 class PurchasedCoursesSerializer(serializers.ModelSerializer):
     """Serializes purchased course subscriptions for students."""
     course = CourseSerializer(read_only=True)
+    batch = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = CourseSubscription
         fields = [
-            'id', 'course', 'purchased_at', 'payment_status'
+            'id', 'course', 'batch', 'purchased_at', 'payment_status'
         ]
+
+    def get_batch(self, obj):
+        """Gets the batch from the first enrollment."""
+        enrollment = obj.enrollments.first()
+        return enrollment.batch if enrollment else None

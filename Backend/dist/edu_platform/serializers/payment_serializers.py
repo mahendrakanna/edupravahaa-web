@@ -1,10 +1,28 @@
 from rest_framework import serializers
-from edu_platform.models import Course, CourseSubscription
+from edu_platform.models import Course, CourseSubscription, ClassSchedule
+
+
+def validate_batch_for_course(value, course):
+    """Shared utility to validate batch availability for a course."""
+    schedules = ClassSchedule.objects.filter(course=course)
+    if not schedules.exists():
+        raise serializers.ValidationError({
+            'error': f"No schedules available for course '{course.name}'."
+        })
+    available_batches = set()
+    for schedule in schedules:
+        available_batches.update(schedule.batches)
+    if value not in available_batches:
+        raise serializers.ValidationError({
+            'error': f"Batch '{value}' is not available for course '{course.name}'."
+        })
+    return value
 
 
 class CreateOrderSerializer(serializers.Serializer):
     """Validates course purchase order creation."""
     course_id = serializers.IntegerField()
+    batch = serializers.CharField(max_length=100)
 
     def validate_course_id(self, value):
         """Ensures course exists and is active."""
@@ -22,6 +40,15 @@ class CreateOrderSerializer(serializers.Serializer):
             raise serializers.ValidationError({"error": "You are already subscribed to this course."})
         
         return value
+
+    def validate_batch(self, value):
+        """Ensures the selected batch is available for the course."""
+        course_id = self.initial_data.get('course_id')
+        try:
+            course = Course.objects.get(id=course_id, is_active=True)
+            return validate_batch_for_course(value, course)
+        except Course.DoesNotExist:
+            raise serializers.ValidationError({"error": "Course not found or inactive."})
 
     def validate(self, attrs):
         """Ensures user is verified before creating order."""

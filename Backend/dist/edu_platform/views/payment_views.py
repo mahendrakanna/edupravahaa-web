@@ -6,7 +6,7 @@ from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from django.utils import timezone
 from rest_framework import serializers
-from edu_platform.models import Course, CourseSubscription
+from edu_platform.models import Course, CourseSubscription, CourseEnrollment
 from edu_platform.permissions.auth_permissions import IsStudent
 from edu_platform.serializers.payment_serializers import CreateOrderSerializer, VerifyPaymentSerializer
 import razorpay
@@ -20,17 +20,14 @@ logger = logging.getLogger(__name__)
 
 def get_error_message(serializer):
     """Extracts a specific error message from serializer errors."""
-    error_message = 'Invalid input data.'
-    for field in serializer.errors:
-        if isinstance(serializer.errors[field], dict) and 'error' in serializer.errors[field]:
-            return serializer.errors[field]['error']
-        elif isinstance(serializer.errors[field], list):
-            return serializer.errors[field][0]
-    if 'non_field_errors' in serializer.errors:
-        return serializer.errors['non_field_errors'][0]
-    if serializer.errors:
-        return list(serializer.errors.values())[0][0] if isinstance(list(serializer.errors.values())[0], list) else list(serializer.errors.values())[0]
-    return error_message
+    errors = serializer.errors
+    if 'non_field_errors' in errors:
+        return errors['non_field_errors'][0]
+    for field, error in errors.items():
+        if isinstance(error, dict) and 'error' in error:
+            return error['error']
+        return error[0] if isinstance(error, list) else error
+    return 'Invalid input data.'
 
 class BaseAPIView(views.APIView):
     def validate_serializer(self, serializer_class, data, context=None):
@@ -62,7 +59,8 @@ class CreateOrderView(BaseAPIView):
                                 'amount': openapi.Schema(type=openapi.TYPE_NUMBER),
                                 'currency': openapi.Schema(type=openapi.TYPE_STRING),
                                 'key': openapi.Schema(type=openapi.TYPE_STRING),
-                                'subscription_id': openapi.Schema(type=openapi.TYPE_INTEGER)
+                                'subscription_id': openapi.Schema(type=openapi.TYPE_INTEGER),
+                                'batch': openapi.Schema(type=openapi.TYPE_STRING)
                             }
                         )
                     }
@@ -111,10 +109,11 @@ class CreateOrderView(BaseAPIView):
         }
     )
     def post(self, request):
-        """Generates Razorpay order and creates/updates subscription."""
+        """Generates Razorpay order and creates/updates subscription and enrollment."""
         try:
             serializer = self.validate_serializer(CreateOrderSerializer, request.data)
             course_id = serializer.validated_data['course_id']
+            batch = serializer.validated_data['batch']
             course = Course.objects.get(id=course_id, is_active=True)
 
             # Check for existing pending subscription
@@ -137,7 +136,8 @@ class CreateOrderView(BaseAPIView):
                 'notes': {
                     'course_id': str(course.id),
                     'student_id': str(request.user.id),
-                    'student_email': request.user.email
+                    'student_email': request.user.email,
+                    'batch': batch
                 }
             }
             order = client.order.create(data=order_data)
@@ -160,6 +160,24 @@ class CreateOrderView(BaseAPIView):
                 )
                 logger.info(f"Created new subscription {subscription.id} for user {request.user.id}, course {course.id}")
 
+            try:
+                enrollment = CourseEnrollment.objects.get(
+                    student=request.user,
+                    course=course,
+                    subscription=subscription
+                )
+                enrollment.batch = batch
+                enrollment.save(update_fields=['batch'])
+                logger.info(f"Updated enrollment for subscription {subscription.id} with batch {batch}")
+            except CourseEnrollment.DoesNotExist:
+                enrollment = CourseEnrollment.objects.create(
+                    student=request.user,
+                    course=course,
+                    batch=batch,
+                    subscription=subscription
+                )
+                logger.info(f"Created new enrollment for subscription {subscription.id} with batch {batch}")
+
             return Response({
                 'message': 'Order created successfully.',
                 'data': {
@@ -167,7 +185,8 @@ class CreateOrderView(BaseAPIView):
                     'amount': order['amount'],
                     'currency': order['currency'],
                     'key': settings.RAZORPAY_KEY_ID,
-                    'subscription_id': subscription.id
+                    'subscription_id': subscription.id,
+                    'batch': batch
                 }
             }, status=status.HTTP_200_OK)
 
@@ -192,7 +211,7 @@ class CreateOrderView(BaseAPIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class VerifyPaymentView(BaseAPIView):
-    """Verifies Razorpay payment and updates subscription."""
+    """Verifies Razorpay payment and updates subscription and enrollment."""
     permission_classes = [IsAuthenticated, IsStudent]
 
     @swagger_auto_schema(
@@ -208,7 +227,8 @@ class VerifyPaymentView(BaseAPIView):
                             type=openapi.TYPE_OBJECT,
                             properties={
                                 'subscription_id': openapi.Schema(type=openapi.TYPE_INTEGER),
-                                'course_name': openapi.Schema(type=openapi.TYPE_STRING)
+                                'course_name': openapi.Schema(type=openapi.TYPE_STRING),
+                                'batch': openapi.Schema(type=openapi.TYPE_STRING)
                             }
                         )
                     }
@@ -257,7 +277,7 @@ class VerifyPaymentView(BaseAPIView):
         }
     )
     def post(self, request):
-        """Verifies payment signature and updates subscription status."""
+        """Verifies payment signature and updates subscription and enrollment status."""
         try:
             serializer = self.validate_serializer(VerifyPaymentSerializer, request.data)
             payment_id = serializer.validated_data['razorpay_payment_id']
@@ -267,12 +287,14 @@ class VerifyPaymentView(BaseAPIView):
 
             # Handle idempotency for completed payments
             if subscription.payment_status == 'completed':
+                enrollment = CourseEnrollment.objects.get(subscription=subscription)
                 logger.info(f"Payment already verified for subscription {subscription.id}, user {request.user.id}")
                 return Response({
                     'message': 'Payment already verified.',
                     'data': {
                         'subscription_id': subscription.id,
-                        'course_name': subscription.course.name
+                        'course_name': subscription.course.name,
+                        'batch': enrollment.batch
                     }
                 }, status=status.HTTP_200_OK)
 
@@ -283,7 +305,7 @@ class VerifyPaymentView(BaseAPIView):
                 'razorpay_signature': signature
             }
 
-            if settings.DEBUG and settings.RAZORPAY_KEY_SECRET == 'fake_secret_for_testing':
+            if settings.DEBUG and "fake_secret_for_testing" == 'fake_secret_for_testing':
                 logger.info(f"Skipping signature verification for subscription {subscription.id} in test mode")
             else:
                 try:
@@ -304,17 +326,26 @@ class VerifyPaymentView(BaseAPIView):
             subscription.payment_completed_at = timezone.now()
             subscription.save()
             
-            logger.info(f"Payment verified for subscription {subscription.id}, user {request.user.id}, course {subscription.course.name}")
+            enrollment = CourseEnrollment.objects.get(subscription=subscription)
+            
+            logger.info(f"Payment verified for subscription {subscription.id}, user {request.user.id}, course {subscription.course.name}, batch {enrollment.batch}")
             return Response({
                 'message': 'Payment verified successfully.',
                 'data': {
                     'subscription_id': subscription.id,
-                    'course_name': subscription.course.name
+                    'course_name': subscription.course.name,
+                    'batch': enrollment.batch
                 }
             }, status=status.HTTP_200_OK)
 
         except serializers.ValidationError as e:
             return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
+        except CourseEnrollment.DoesNotExist:
+            logger.error(f"No enrollment found for subscription {subscription.id if 'subscription' in locals() else 'unknown'}")
+            return Response({
+                'error': 'No enrollment found for this subscription.',
+                'status': status.HTTP_400_BAD_REQUEST
+            }, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
             logger.error(f"Error updating subscription {subscription.id if 'subscription' in locals() else 'unknown'} for user {request.user.id}: {str(e)}")
             return Response({

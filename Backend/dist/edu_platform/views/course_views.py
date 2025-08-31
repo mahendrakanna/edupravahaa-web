@@ -75,7 +75,7 @@ class CourseListView(generics.ListAPIView):
         return queryset
 
     @swagger_auto_schema(
-        operation_description="List active courses with optional search and category filters",
+        operation_description="List active courses with optional search and category filters, including batch details",
         responses={
             200: openapi.Response(
                 description="Courses retrieved successfully",
@@ -83,7 +83,29 @@ class CourseListView(generics.ListAPIView):
                     type=openapi.TYPE_OBJECT,
                     properties={
                         'message': openapi.Schema(type=openapi.TYPE_STRING),
-                        'data': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Items(type=openapi.TYPE_OBJECT))
+                        'data': openapi.Schema(
+                            type=openapi.TYPE_ARRAY,
+                            items=openapi.Items(
+                                type=openapi.TYPE_OBJECT,
+                                properties={
+                                    'id': openapi.Schema(type=openapi.TYPE_INTEGER),
+                                    'name': openapi.Schema(type=openapi.TYPE_STRING),
+                                    'slug': openapi.Schema(type=openapi.TYPE_STRING),
+                                    'description': openapi.Schema(type=openapi.TYPE_STRING),
+                                    'category': openapi.Schema(type=openapi.TYPE_STRING),
+                                    'level': openapi.Schema(type=openapi.TYPE_STRING),
+                                    'thumbnail': openapi.Schema(type=openapi.TYPE_STRING, nullable=True),
+                                    'duration_hours': openapi.Schema(type=openapi.TYPE_INTEGER),
+                                    'base_price': openapi.Schema(type=openapi.TYPE_NUMBER),
+                                    'advantages': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Items(type=openapi.TYPE_STRING)),
+                                    'batches': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Items(type=openapi.TYPE_STRING)),
+                                    'schedule': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Items(type=openapi.TYPE_OBJECT)),
+                                    'is_active': openapi.Schema(type=openapi.TYPE_BOOLEAN),
+                                    'created_at': openapi.Schema(type=openapi.TYPE_STRING, format='date-time'),
+                                    'updated_at': openapi.Schema(type=openapi.TYPE_STRING, format='date-time')
+                                }
+                            )
+                        )
                     }
                 )
             ),

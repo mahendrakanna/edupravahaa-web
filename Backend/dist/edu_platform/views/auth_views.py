@@ -10,14 +10,14 @@ from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from django.utils import timezone
 from edu_platform.permissions.auth_permissions import IsAdmin, IsTeacher, IsStudent
-from edu_platform.models import User, OTP, CourseSubscription
+from edu_platform.models import User, OTP, CourseSubscription, ClassSchedule
 from edu_platform.utility.email_services import send_otp_email
 from edu_platform.utility.sms_services import get_sms_service, ConsoleSMSService
 from edu_platform.serializers.auth_serializers import (
     UserSerializer, RegisterSerializer, LoginSerializer,
     TeacherCreateSerializer, ChangePasswordSerializer,
     SendOTPSerializer, VerifyOTPSerializer,
-    ForgotPasswordSerializer, AdminCreateSerializer
+    ForgotPasswordSerializer, AdminCreateSerializer, AssignedCourseSerializer
 )
 import logging
 import phonenumbers
@@ -363,7 +363,8 @@ class LoginView(generics.GenericAPIView):
                         'is_trial': openapi.Schema(type=openapi.TYPE_BOOLEAN),
                         'has_purchased': openapi.Schema(type=openapi.TYPE_BOOLEAN),
                         'trial_ends_at': openapi.Schema(type=openapi.TYPE_STRING, format='date-time'),
-                        'trial_remaining_seconds': openapi.Schema(type=openapi.TYPE_INTEGER)
+                        'trial_remaining_seconds': openapi.Schema(type=openapi.TYPE_INTEGER),
+                        'assigned_courses': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Items(type=openapi.TYPE_OBJECT))
                     }
                 )
             ),
@@ -400,7 +401,7 @@ class LoginView(generics.GenericAPIView):
         }
     )
     def post(self, request):
-        """Authenticates user and returns JWT tokens with trial info for students."""
+        """Authenticates user and returns JWT tokens with trial info for students and assigned courses for teachers."""
         serializer = self.get_serializer(data=request.data)
         if not serializer.is_valid():
             error_message = 'Invalid login credentials.'
@@ -425,6 +426,10 @@ class LoginView(generics.GenericAPIView):
                     'status': status.HTTP_403_FORBIDDEN
                 }, status=status.HTTP_403_FORBIDDEN)
                 
+            # Update last_login
+            user.last_login = timezone.now()
+            user.save(update_fields=['last_login'])
+            
             refresh = RefreshToken.for_user(user)
             
             response_data = {
@@ -442,6 +447,11 @@ class LoginView(generics.GenericAPIView):
                 if not user.has_purchased_courses and user.trial_end_date:
                     response_data['trial_ends_at'] = user.trial_end_date.isoformat()
                     response_data['trial_remaining_seconds'] = user.trial_remaining_seconds
+            
+            # Include assigned courses for teachers
+            if user.role == 'teacher':
+                schedules = ClassSchedule.objects.filter(teacher=user)
+                response_data['assigned_courses'] = AssignedCourseSerializer(schedules, many=True).data
 
             return Response(response_data, status=status.HTTP_200_OK)
         
@@ -609,27 +619,7 @@ class TeacherRegisterView(generics.CreateAPIView):
                     type=openapi.TYPE_OBJECT,
                     properties={
                         'message': openapi.Schema(type=openapi.TYPE_STRING),
-                        'access': openapi.Schema(type=openapi.TYPE_STRING),
-                        'refresh': openapi.Schema(type=openapi.TYPE_STRING),
-                        'user': openapi.Schema(
-                            type=openapi.TYPE_OBJECT,
-                            properties={
-                                'name': openapi.Schema(type=openapi.TYPE_STRING),
-                                'course': openapi.Schema(type=openapi.TYPE_STRING),
-                                'batch': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Items(type=openapi.TYPE_STRING)),
-                                'weekdaysStartDate': openapi.Schema(type=openapi.TYPE_STRING, format='date', nullable=True),
-                                'weekendStartDate': openapi.Schema(type=openapi.TYPE_STRING, format='date', nullable=True),
-                                'weekdaysStart': openapi.Schema(type=openapi.TYPE_STRING, nullable=True),
-                                'weekdaysEnd': openapi.Schema(type=openapi.TYPE_STRING, nullable=True),
-                                'saturdayStart': openapi.Schema(type=openapi.TYPE_STRING, nullable=True),
-                                'saturdayEnd': openapi.Schema(type=openapi.TYPE_STRING, nullable=True),
-                                'sundayStart': openapi.Schema(type=openapi.TYPE_STRING, nullable=True),
-                                'sundayEnd': openapi.Schema(type=openapi.TYPE_STRING, nullable=True),
-                                'email': openapi.Schema(type=openapi.TYPE_STRING),
-                                'phone': openapi.Schema(type=openapi.TYPE_STRING),
-                                'schedule': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Items(type=openapi.TYPE_OBJECT))
-                            }
-                        )
+                        'data': openapi.Schema(type=openapi.TYPE_OBJECT)
                     }
                 )
             ),
@@ -657,7 +647,8 @@ class TeacherRegisterView(generics.CreateAPIView):
         }
     )
     def post(self, request, *args, **kwargs):
-        """Creates a teacher user with JWT tokens and returns all provided data."""
+        """Creates a teacher user and returns detailed profile data."""
+        logger.debug(f"Received teacher registration request: {request.data}")
         serializer = self.get_serializer(data=request.data)
         if not serializer.is_valid():
             errors = serializer.errors
@@ -689,35 +680,11 @@ class TeacherRegisterView(generics.CreateAPIView):
         
         try:
             user = serializer.save()
-            refresh = RefreshToken.for_user(user)
-            # Prepare response with all validated data
-            response_data = {
-                'message': 'Teacher registration successful.',
-                'access': str(refresh.access_token),
-                'refresh': str(refresh),
-                'user': {
-                    'name': serializer.validated_data['name'],
-                    'course': serializer.validated_data['course'],
-                    'batch': serializer.validated_data['batch'],
-                    'weekdaysStartDate': serializer.validated_data.get('weekdaysStartDate', None),
-                    'weekendStartDate': serializer.validated_data.get('weekendStartDate', None),
-                    'weekdaysStart': serializer.validated_data.get('weekdaysStart', ''),
-                    'weekdaysEnd': serializer.validated_data.get('weekdaysEnd', ''),
-                    'saturdayStart': serializer.validated_data.get('saturdayStart', ''),
-                    'saturdayEnd': serializer.validated_data.get('saturdayEnd', ''),
-                    'sundayStart': serializer.validated_data.get('sundayStart', ''),
-                    'sundayEnd': serializer.validated_data.get('sundayEnd', ''),
-                    'email': serializer.validated_data['email'],
-                    'phone': serializer.validated_data['phone_number'],
-                    'schedule': serializer.validated_data['schedule']
-                }
-            }
-            # Convert dates to ISO format if present
-            if response_data['user']['weekdaysStartDate']:
-                response_data['user']['weekdaysStartDate'] = response_data['user']['weekdaysStartDate'].isoformat()
-            if response_data['user']['weekendStartDate']:
-                response_data['user']['weekendStartDate'] = response_data['user']['weekendStartDate'].isoformat()
-            return Response(response_data, status=status.HTTP_201_CREATED)
+            logger.info(f"Teacher created successfully: {user.id}")
+            return Response({
+                'message': 'Teacher created successfully.',
+                'data': UserSerializer(user, context={'request': request}).data
+            }, status=status.HTTP_201_CREATED)
         except serializers.ValidationError as e:
             logger.error(f"Teacher registration validation error: {str(e)}")
             return Response({
@@ -732,7 +699,7 @@ class TeacherRegisterView(generics.CreateAPIView):
                 'status': status.HTTP_500_INTERNAL_SERVER_ERROR
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-            
+
 class AdminRegisterView(generics.CreateAPIView):
     """Registers a new admin user by any user (including unauthorized)."""
     queryset = User.objects.all()

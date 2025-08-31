@@ -1,9 +1,15 @@
 from rest_framework import serializers
 from django.contrib.auth import authenticate, get_user_model
 from django.db.models import Q
-from edu_platform.models import User, TeacherProfile, OTP, StudentProfile
+from edu_platform.models import User, TeacherProfile, OTP, StudentProfile, Course, ClassSchedule
+from edu_platform.serializers.course_serializers import CourseSerializer
 import re
 from django.utils import timezone
+from datetime import datetime, timedelta
+import logging
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 User = get_user_model()
 
@@ -56,7 +62,56 @@ def check_user_existence_utility(email=None, phone_number=None):
         raise serializers.ValidationError({
             'error': 'This phone number is already registered.'
         })
-        
+
+class TeacherProfileSerializer(serializers.ModelSerializer):
+    """Serializes teacher profile data."""
+    
+    class Meta:
+        model = TeacherProfile
+        fields = ['qualification', 'experience_years', 'specialization', 'bio', 
+                  'profile_picture', 'linkedin_url', 'resume', 'is_verified', 
+                  'teaching_languages']
+        read_only_fields = ['is_verified']
+
+    def validate_experience_years(self, value):
+        """Ensures experience years are within valid range."""
+        if value < 0 or value > 50:
+            raise serializers.ValidationError({
+                'error': 'Experience years must be between 0 and 50.'
+            })
+        return value
+
+    def validate_specialization(self, value):
+        """Ensures specialization is a non-empty list."""
+        if not isinstance(value, list) or not value:
+            raise serializers.ValidationError({
+                'error': 'Specialization must be a non-empty list of subjects.'
+            })
+        return value
+
+    def validate_teaching_languages(self, value):
+        """Ensures teaching languages is a list."""
+        if not isinstance(value, list):
+            raise serializers.ValidationError({
+                'error': 'Teaching languages must be a list.'
+            })
+        return value
+
+    def validate_linkedin_url(self, value):
+        """Ensures LinkedIn URL is valid if provided."""
+        if value and not re.match(r'^https?://(www\.)?linkedin\.com/.*$', value):
+            raise serializers.ValidationError({
+                'error': 'Invalid LinkedIn URL.'
+            })
+        return value
+
+class AssignedCourseSerializer(serializers.ModelSerializer):
+    course = CourseSerializer(read_only=True)
+    
+    class Meta:
+        model = ClassSchedule
+        fields = ['course']
+
 class UserSerializer(serializers.ModelSerializer):
     """Serializes basic user data for retrieval and updates."""
     profile = serializers.SerializerMethodField(read_only=True)
@@ -77,18 +132,20 @@ class UserSerializer(serializers.ModelSerializer):
         return value
 
     def get_profile(self, obj):
-        if obj.is_teacher:
-            try:
-                return TeacherProfileSerializer(obj.teacher_profile).data
-            except TeacherProfile.DoesNotExist:
-                return None
-        elif obj.is_student:
-            try:
-                return StudentProfileSerializer(obj.student_profile).data
-            except StudentProfile.DoesNotExist:
-                return None
-        return None
-
+        logger.debug(f"Serializing profile for user {obj.id}, role: {obj.role}")
+        try:
+            if obj.is_teacher:
+                profile = TeacherProfile.objects.get(user=obj)
+                return TeacherProfileSerializer(profile, context=self.context).data
+            elif obj.is_student:
+                profile = StudentProfile.objects.get(user=obj)
+                return StudentProfileSerializer(profile, context=self.context).data
+            return None
+        except Exception as e:
+            logger.error(f"Error serializing profile for user {obj.id}: {str(e)}")
+            raise serializers.ValidationError({
+                'error': f'Failed to serialize profile: {str(e)}'
+            })
 
 class RegisterSerializer(serializers.Serializer):
     """Handles student user registration with email and phone verification."""
@@ -189,25 +246,17 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, min_length=8)
     confirm_password = serializers.CharField(write_only=True, required=True)
     name = serializers.CharField(max_length=150, required=True, allow_blank=False)
-    course = serializers.CharField(max_length=100, required=True, allow_blank=False)
-    batch = serializers.ListField(child=serializers.CharField(), required=True, allow_empty=False)
-    weekdaysStartDate = serializers.DateField(required=False, allow_null=True)
-    weekendStartDate = serializers.DateField(required=False, allow_null=True)
-    weekdaysStart = serializers.CharField(max_length=20, required=False, allow_blank=True)
-    weekdaysEnd = serializers.CharField(max_length=20, required=False, allow_blank=True)
-    saturdayStart = serializers.CharField(max_length=20, required=False, allow_blank=True)
-    saturdayEnd = serializers.CharField(max_length=20, required=False, allow_blank=True)
-    sundayStart = serializers.CharField(max_length=20, required=False, allow_blank=True)
-    sundayEnd = serializers.CharField(max_length=20, required=False, allow_blank=True)
-    schedule = serializers.JSONField(required=True, allow_null=False)
+    course_assignments = serializers.ListField(
+        child=serializers.DictField(),
+        required=False,
+        allow_empty=True
+    )
     phone = serializers.CharField(source='phone_number', max_length=15, required=True, allow_blank=False)
 
     class Meta:
         model = User
-        fields = ['name', 'course', 'batch', 'weekdaysStartDate', 'weekendStartDate', 
-                  'weekdaysStart', 'weekdaysEnd', 'saturdayStart', 'saturdayEnd', 
-                  'sundayStart', 'sundayEnd', 'email', 'phone', 'password', 
-                  'confirm_password', 'schedule']
+        fields = ['name', 'course_assignments', 'email', 'phone', 'password', 
+                  'confirm_password']
     
     def validate_name(self, value):
         """Ensures name is not blank."""
@@ -217,32 +266,133 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
             })
         return value
     
-    def validate_course(self, value):
-        """Ensures course is not blank."""
-        if not value.strip():
+    def validate_course_assignments(self, value):
+        """Validates each course assignment."""
+        logger.debug(f"Validating course_assignments: {value}")
+        if not isinstance(value, list):
             raise serializers.ValidationError({
-                'error': 'Course is required and cannot be blank.'
+                'error': 'Course assignments must be a list.'
             })
-        return value
-    
-    def validate_batch(self, value):
-        """Ensures batch is a non-empty list."""
-        if not value or not isinstance(value, list):
+        course_ids = []
+        for assignment in value:
+            if not isinstance(assignment, dict):
+                raise serializers.ValidationError({
+                    'error': 'Each assignment must be a dictionary.'
+                })
+            required_keys = ['course_id', 'batches']
+            if not all(key in assignment for key in required_keys):
+                raise serializers.ValidationError({
+                    'error': f"Each assignment must have {required_keys}."
+                })
+            course_id = assignment['course_id']
+            if not isinstance(course_id, int):
+                raise serializers.ValidationError({
+                    'error': 'course_id must be an integer.'
+                })
+            if course_id in course_ids:
+                raise serializers.ValidationError({
+                    'error': 'Duplicate course_id in assignments.'
+                })
+            course_ids.append(course_id)
+            batches = assignment['batches']
+            if not isinstance(batches, list) or not batches:
+                raise serializers.ValidationError({
+                    'error': 'batches must be a non-empty list.'
+                })
+            valid_batches = ['weekdays', 'weekends']
+            if not all(b in valid_batches for b in batches):
+                raise serializers.ValidationError({
+                    'error': f"batches must be from {valid_batches}."
+                })
+            # Validate fields based on batches
+            if 'weekdays' in batches:
+                wk_req = ['weekdays_start_date', 'weekdays_days', 'weekdays_start', 'weekdays_end']
+                if not all(key in assignment for key in wk_req):
+                    raise serializers.ValidationError({
+                        'error': f"For weekdays, require {wk_req}."
+                    })
+                days = assignment['weekdays_days']
+                if not isinstance(days, list) or not days:
+                    raise serializers.ValidationError({
+                        'error': 'weekdays_days must be non-empty list.'
+                    })
+                valid_days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
+                if not all(d in valid_days for d in days):
+                    raise serializers.ValidationError({
+                        'error': f"weekdays_days must be from {valid_days}."
+                    })
+                # Validate times
+                try:
+                    start = datetime.strptime(assignment['weekdays_start'], '%I:%M %p').time()
+                    end = datetime.strptime(assignment['weekdays_end'], '%I:%M %p').time()
+                    if start >= end:
+                        raise ValueError
+                except ValueError:
+                    raise serializers.ValidationError({
+                        'error': 'Invalid weekdays times or format (HH:MM AM/PM). End > start.'
+                    })
+                # Convert weekdays_start_date to date object
+                try:
+                    assignment['weekdays_start_date'] = datetime.strptime(
+                        assignment['weekdays_start_date'], '%Y-%m-%d'
+                    ).date()
+                except ValueError:
+                    raise serializers.ValidationError({
+                        'error': 'Invalid weekdays_start_date format (YYYY-MM-DD).'
+                    })
+            if 'weekends' in batches:
+                we_req = ['weekend_start_date']
+                if not all(key in assignment for key in we_req):
+                    raise serializers.ValidationError({
+                        'error': f"For weekends, require {we_req}."
+                    })
+                # Saturday and Sunday optional, but at least one
+                has_sat = 'saturday_start' in assignment and 'saturday_end' in assignment
+                has_sun = 'sunday_start' in assignment and 'sunday_end' in assignment
+                if not (has_sat or has_sun):
+                    raise serializers.ValidationError({
+                        'error': 'For weekends, provide at least Saturday or Sunday times.'
+                    })
+                if has_sat:
+                    try:
+                        start = datetime.strptime(assignment['saturday_start'], '%I:%M %p').time()
+                        end = datetime.strptime(assignment['saturday_end'], '%I:%M %p').time()
+                        if start >= end:
+                            raise ValueError
+                    except ValueError:
+                        raise serializers.ValidationError({
+                            'error': 'Invalid Saturday times or format. End > start.'
+                        })
+                if has_sun:
+                    try:
+                        start = datetime.strptime(assignment['sunday_start'], '%I:%M %p').time()
+                        end = datetime.strptime(assignment['sunday_end'], '%I:%M %p').time()
+                        if start >= end:
+                            raise ValueError
+                    except ValueError:
+                        raise serializers.ValidationError({
+                            'error': 'Invalid Sunday times or format. End > start.'
+                        })
+                # Convert weekend_start_date to date object
+                try:
+                    assignment['weekend_start_date'] = datetime.strptime(
+                        assignment['weekend_start_date'], '%Y-%m-%d'
+                    ).date()
+                except ValueError:
+                    raise serializers.ValidationError({
+                        'error': 'Invalid weekend_start_date format (YYYY-MM-DD).'
+                    })
+        # Check courses exist
+        courses = Course.objects.filter(id__in=course_ids, is_active=True)
+        if len(courses) != len(course_ids):
             raise serializers.ValidationError({
-                'error': 'Batch must be a non-empty list of batch names.'
-            })
-        return value
-    
-    def validate_schedule(self, value):
-        """Ensures schedule is a non-empty JSON object."""
-        if not value or not isinstance(value, (list, dict)):
-            raise serializers.ValidationError({
-                'error': 'Schedule must be a non-empty JSON object or list.'
+                'error': 'One or more courses do not exist or are not active.'
             })
         return value
     
     def validate_email(self, value):
         """Ensures email is not blank and not already registered."""
+        logger.debug(f"Validating email: {value}")
         if not value.strip():
             raise serializers.ValidationError({
                 'error': 'Email is required and cannot be blank.'
@@ -255,6 +405,7 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
     
     def validate_phone(self, value):
         """Ensures phone number is valid and not already registered."""
+        logger.debug(f"Validating phone: {value}")
         if not value.strip():
             raise serializers.ValidationError({
                 'error': 'Phone number is required and cannot be blank.'
@@ -271,32 +422,36 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
     
     def validate_password(self, value):
         """Validates password strength."""
+        logger.debug("Validating password")
         return validate_password_utility(value)
     
     def validate(self, attrs):
         """Ensures passwords match."""
+        logger.debug(f"Validating attrs: {attrs}")
         if attrs['password'] != attrs['confirm_password']:
             raise serializers.ValidationError({
                 'error': 'Passwords do not match.'
             })
         return attrs
     
+    def to_representation(self, instance):
+        """Customizes the response to include full user and profile data."""
+        logger.debug(f"Serializing teacher response for user {instance.id}")
+        try:
+            representation = UserSerializer(instance, context=self.context).data
+            return representation
+        except Exception as e:
+            logger.error(f"Error in to_representation for user {instance.id}: {str(e)}")
+            raise serializers.ValidationError({
+                'error': f'Failed to serialize teacher response: {str(e)}'
+            })
+
     def create(self, validated_data):
-        """Creates a pre-verified teacher user."""
+        """Creates a pre-verified teacher user and associated ClassSchedule objects."""
+        logger.debug(f"Creating teacher with validated data: {validated_data}")
         try:
             name = validated_data.pop('name')
-            course = validated_data.pop('course')
-            batch = validated_data.pop('batch')
-            weekdaysStartDate = validated_data.pop('weekdaysStartDate', None)
-            weekendStartDate = validated_data.pop('weekendStartDate', None)
-            weekdaysStart = validated_data.pop('weekdaysStart', '')
-            weekdaysEnd = validated_data.pop('weekdaysEnd', '')
-            saturdayStart = validated_data.pop('saturdayStart', '')
-            saturdayEnd = validated_data.pop('saturdayEnd', '')
-            sundayStart = validated_data.pop('sundayStart', '')
-            sundayEnd = validated_data.pop('sundayEnd', '')
-            schedule = validated_data.pop('schedule')
-            
+            course_assignments = validated_data.pop('course_assignments', [])
             phone = validated_data.pop('phone_number')
             validated_data['phone_number'] = phone
             validated_data['username'] = name
@@ -304,6 +459,8 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
             validated_data.pop('confirm_password')
             password = validated_data.pop('password')
             
+            # Create the user
+            logger.info(f"Creating user with email: {validated_data['email']}")
             user = User.objects.create_user(
                 **validated_data,
                 role='teacher',
@@ -313,26 +470,61 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
             user.set_password(password)
             user.save()
             
+            # Create the teacher profile
+            logger.info(f"Creating teacher profile for user: {user.id}")
             TeacherProfile.objects.create(
                 user=user,
-                course=course,
-                batches=batch,
-                weekdays_start_date=weekdaysStartDate,
-                weekend_start_date=weekendStartDate,
-                weekdays_start=weekdaysStart,
-                weekdays_end=weekdaysEnd,
-                saturday_start=saturdayStart,
-                saturday_end=saturdayEnd,
-                sunday_start=sundayStart,
-                sunday_end=sundayEnd,
-                schedule=schedule
+                qualification='',
+                specialization=[],
+                teaching_languages=[],
             )
+            
+            # Create ClassSchedule for each assignment
+            for assignment in course_assignments:
+                course_id = assignment['course_id']
+                batches = assignment['batches']
+                course = Course.objects.get(id=course_id)
+                schedule = []
+                
+                if 'weekdays' in batches:
+                    time_str = f"{assignment['weekdays_start']} to {assignment['weekdays_end']}"
+                    schedule.append({
+                        "type": "weekdays",
+                        "startDate": assignment['weekdays_start_date'].isoformat(),  # Now a date object
+                        "days": assignment['weekdays_days'],
+                        "time": time_str
+                    })
+                
+                if 'weekends' in batches:
+                    if 'saturday_start' in assignment:
+                        time_str = f"{assignment['saturday_start']} to {assignment['saturday_end']}"
+                        schedule.append({
+                            "type": "weekends",
+                            "startDate": assignment['weekend_start_date'].isoformat(),  # Now a date object
+                            "days": ["Saturday"],
+                            "time": time_str
+                        })
+                    if 'sunday_start' in assignment:
+                        time_str = f"{assignment['sunday_start']} to {assignment['sunday_end']}"
+                        schedule.append({
+                            "type": "weekends",
+                            "startDate": assignment['weekend_start_date'].isoformat(),  # Now a date object
+                            "days": ["Sunday"],
+                            "time": time_str
+                        })
+                
+                logger.info(f"Creating ClassSchedule for course {course.name}")
+                ClassSchedule.objects.create(
+                    teacher=user,
+                    course=course,
+                    batches=batches,
+                    schedule=schedule
+                )
+            
+            logger.info(f"Teacher created successfully: {user.id}")
             return user
-        except KeyError as e:
-            raise serializers.ValidationError({
-                'error': f'Missing required field: {str(e)}'
-            })
         except Exception as e:
+            logger.error(f"Teacher creation error: {str(e)}")
             raise serializers.ValidationError({
                 'error': f'Failed to create teacher: {str(e)}'
             })
@@ -639,51 +831,6 @@ class ForgotPasswordSerializer(serializers.Serializer):
         otp.is_verified = True
         otp.save()
         return user
-
-
-class TeacherProfileSerializer(serializers.ModelSerializer):
-    """Serializes teacher profile data."""
-    class Meta:
-        model = TeacherProfile
-        fields = ['qualification', 'experience_years', 'specialization', 'bio', 
-                  'profile_picture', 'linkedin_url', 'resume', 'is_verified', 
-                  'teaching_languages', 'course', 'batches', 'weekdays_start_date', 
-                  'weekend_start_date', 'weekdays_start', 'weekdays_end', 
-                  'saturday_start', 'saturday_end', 'sunday_start', 'sunday_end', 
-                  'schedule']
-        read_only_fields = ['is_verified']
-
-    def validate_experience_years(self, value):
-        """Ensures experience years are within valid range."""
-        if value < 0 or value > 50:
-            raise serializers.ValidationError({
-                'error': 'Experience years must be between 0 and 50.'
-            })
-        return value
-
-    def validate_specialization(self, value):
-        """Ensures specialization is a non-empty list."""
-        if not isinstance(value, list) or not value:
-            raise serializers.ValidationError({
-                'error': 'Specialization must be a non-empty list of subjects.'
-            })
-        return value
-
-    def validate_teaching_languages(self, value):
-        """Ensures teaching languages is a list."""
-        if not isinstance(value, list):
-            raise serializers.ValidationError({
-                'error': 'Teaching languages must be a list.'
-            })
-        return value
-
-    def validate_linkedin_url(self, value):
-        """Ensures LinkedIn URL is valid if provided."""
-        if value and not re.match(r'^https?://(www\.)?linkedin\.com/.*$', value):
-            raise serializers.ValidationError({
-                'error': 'Invalid LinkedIn URL.'
-            })
-        return value
 
 
 class StudentProfileSerializer(serializers.ModelSerializer):
