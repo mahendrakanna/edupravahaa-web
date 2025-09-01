@@ -1,6 +1,8 @@
 from rest_framework import serializers
 from edu_platform.models import Course, CourseSubscription, ClassSchedule, CourseEnrollment
+import logging
 
+logger = logging.getLogger(__name__)
 
 class CourseSerializer(serializers.ModelSerializer):
     """Serializes course data for retrieval and updates."""
@@ -27,7 +29,6 @@ class CourseSerializer(serializers.ModelSerializer):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Ensure partial updates are allowed for PUT requests
         if self.context.get('request') and self.context['request'].method in ['PUT', 'PATCH']:
             self.partial = True
 
@@ -60,7 +61,11 @@ class CourseSerializer(serializers.ModelSerializer):
         return value
 
     def get_batches(self, obj):
-        """Aggregates unique batches from all ClassSchedules for the course."""
+        """Returns batches for the course, filtered by context if provided."""
+        batches = self.context.get('batches')
+        if batches:
+            return [batch for batch in batches if batch in ['weekdays', 'weekends']]
+        
         schedules = ClassSchedule.objects.filter(course=obj)
         all_batches = set()
         for schedule in schedules:
@@ -68,26 +73,50 @@ class CourseSerializer(serializers.ModelSerializer):
         return list(all_batches)
 
     def get_schedule(self, obj):
-        """Aggregates all schedule entries from all ClassSchedules for the course."""
+        """Returns schedule entries for the course, filtered by assigned/enrolled batches if provided."""
+        batches = self.context.get('batches')
         schedules = ClassSchedule.objects.filter(course=obj)
         all_schedules = []
+        
         for schedule in schedules:
-            all_schedules.extend(schedule.schedule)
+            for s in schedule.schedule:
+                if not batches or (batches and s.get('type') in batches):
+                    if s not in all_schedules:
+                        all_schedules.append(s)
+        
         return all_schedules
 
+class MyCoursesSerializer(serializers.Serializer):
+    """Serializes purchased courses for students or assigned courses for teachers."""
+    id = serializers.IntegerField(read_only=True)
+    course = serializers.SerializerMethodField(read_only=True)
+    purchased_at = serializers.DateTimeField(read_only=True, allow_null=True)
+    payment_status = serializers.CharField(read_only=True, allow_null=True)
 
-class PurchasedCoursesSerializer(serializers.ModelSerializer):
-    """Serializes purchased course subscriptions for students."""
-    course = CourseSerializer(read_only=True)
-    batch = serializers.SerializerMethodField(read_only=True)
-
-    class Meta:
-        model = CourseSubscription
-        fields = [
-            'id', 'course', 'batch', 'purchased_at', 'payment_status'
-        ]
-
-    def get_batch(self, obj):
-        """Gets the batch from the first enrollment."""
-        enrollment = obj.enrollments.first()
-        return enrollment.batch if enrollment else None
+    def get_course(self, obj):
+        """Serializes the course with batch details based on user role."""
+        request = self.context.get('request')
+        user = request.user if request else None
+        batch = None
+        batches = None
+        
+        if user and user.role == 'student':
+            enrollment = CourseEnrollment.objects.filter(subscription=obj).first()
+            batch = enrollment.batch if enrollment else None
+        elif user and user.role == 'teacher':
+            schedules = ClassSchedule.objects.filter(course=obj, teacher=user)
+            batches = set()
+            for schedule in schedules:
+                batches.update(schedule.batches)
+            batches = list(batches) if batches else None
+        
+        try:
+            return CourseSerializer(
+                obj if user.role == 'teacher' else obj.course,
+                context={'batches': batches or (batch and [batch]), 'request': self.context.get('request')}
+            ).data
+        except Exception as e:
+            logger.error(f"Error serializing course for {user.role} (course_id: {obj.id if user.role == 'teacher' else obj.course.id}): {str(e)}")
+            raise serializers.ValidationError({
+                'error': f'Failed to serialize course: {str(e)}'
+            })

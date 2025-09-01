@@ -6,8 +6,8 @@ from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from django.db.models import Q
 from rest_framework import serializers
-from edu_platform.models import Course, CourseSubscription
-from edu_platform.serializers.course_serializers import CourseSerializer, PurchasedCoursesSerializer
+from edu_platform.models import Course, CourseSubscription, ClassSchedule
+from edu_platform.serializers.course_serializers import CourseSerializer, MyCoursesSerializer
 from edu_platform.permissions.auth_permissions import IsTeacher, IsStudent, IsTeacherOrAdmin, IsAdmin
 import logging
 
@@ -44,17 +44,12 @@ class CourseListView(generics.ListAPIView):
     
     def get_queryset(self):
         """Filters courses based on user role, purchase status, and query parameters."""
-        # Start with active courses
         queryset = Course.objects.filter(is_active=True)
-        
-        # Apply student-specific filtering
         user = self.request.user
         if user.is_authenticated and user.role == 'student':
             if not user.is_trial_expired and not user.has_purchased_courses:
-                # Students in trial with no purchases see all active courses
                 pass
             elif user.has_purchased_courses:
-                # Exclude purchased courses for students with purchases
                 purchased_course_ids = CourseSubscription.objects.filter(
                     student=user, payment_status='completed'
                 ).values_list('course__id', flat=True)
@@ -66,12 +61,9 @@ class CourseListView(generics.ListAPIView):
                 Q(description__icontains=search) |
                 Q(category__icontains=search)
             )
-        
-        # Filter by category if provided
         category = self.request.query_params.get('category', None)
         if category:
             queryset = queryset.filter(category__iexact=category)
-            
         return queryset
 
     @swagger_auto_schema(
@@ -304,28 +296,76 @@ class AdminCourseUpdateView(BaseAPIView, generics.UpdateAPIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class MyCoursesView(generics.ListAPIView):
-    """Lists all purchased courses for a student."""
-    serializer_class = PurchasedCoursesSerializer
-    permission_classes = [IsAuthenticated, IsStudent]
+    """Lists purchased courses for students or assigned courses for teachers with their specific batch and schedule details."""
+    serializer_class = MyCoursesSerializer
+    permission_classes = [IsAuthenticated, IsStudent | IsTeacher]
     
     def get_queryset(self):
-        """Returns purchased course subscriptions for the authenticated student."""
-        # Fetch completed subscriptions for the current user
-        return CourseSubscription.objects.filter(
-            student=self.request.user,
-            payment_status='completed'
-        ).select_related('course').order_by('-purchased_at')
+        """Returns purchased courses for students or assigned courses for teachers."""
+        user = self.request.user
+        if user.role == 'student':
+            return CourseSubscription.objects.filter(
+                student=user,
+                payment_status='completed'
+            ).select_related('course').prefetch_related('enrollments').order_by('-purchased_at')
+        elif user.role == 'teacher':
+            return Course.objects.filter(
+                class_schedules__teacher=user,
+                is_active=True
+            ).distinct().order_by('-created_at')
+        return CourseSubscription.objects.none()
 
     @swagger_auto_schema(
-        operation_description="List purchased courses for a student",
+        operation_description="List purchased courses for students (with enrolled batch and schedule details) or assigned courses for teachers (with all assigned batches and their schedule details)",
         responses={
             200: openapi.Response(
-                description="Purchased courses retrieved successfully",
+                description="Courses retrieved successfully",
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
                         'message': openapi.Schema(type=openapi.TYPE_STRING),
-                        'data': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Items(type=openapi.TYPE_OBJECT))
+                        'data': openapi.Schema(
+                            type=openapi.TYPE_ARRAY,
+                            items=openapi.Items(
+                                type=openapi.TYPE_OBJECT,
+                                properties={
+                                    'id': openapi.Schema(type=openapi.TYPE_INTEGER),
+                                    'course': openapi.Schema(
+                                        type=openapi.TYPE_OBJECT,
+                                        properties={
+                                            'id': openapi.Schema(type=openapi.TYPE_INTEGER),
+                                            'name': openapi.Schema(type=openapi.TYPE_STRING),
+                                            'slug': openapi.Schema(type=openapi.TYPE_STRING),
+                                            'description': openapi.Schema(type=openapi.TYPE_STRING),
+                                            'category': openapi.Schema(type=openapi.TYPE_STRING),
+                                            'level': openapi.Schema(type=openapi.TYPE_STRING),
+                                            'thumbnail': openapi.Schema(type=openapi.TYPE_STRING, nullable=True),
+                                            'duration_hours': openapi.Schema(type=openapi.TYPE_INTEGER),
+                                            'base_price': openapi.Schema(type=openapi.TYPE_NUMBER),
+                                            'advantages': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Items(type=openapi.TYPE_STRING)),
+                                            'batches': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Items(type=openapi.TYPE_STRING)),
+                                            'schedule': openapi.Schema(
+                                                type=openapi.TYPE_ARRAY,
+                                                items=openapi.Items(
+                                                    type=openapi.TYPE_OBJECT,
+                                                    properties={
+                                                        'days': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Items(type=openapi.TYPE_STRING)),
+                                                        'time': openapi.Schema(type=openapi.TYPE_STRING),
+                                                        'type': openapi.Schema(type=openapi.TYPE_STRING),
+                                                        'startDate': openapi.Schema(type=openapi.TYPE_STRING)
+                                                    }
+                                                )
+                                            ),
+                                            'is_active': openapi.Schema(type=openapi.TYPE_BOOLEAN),
+                                            'created_at': openapi.Schema(type=openapi.TYPE_STRING, format='date-time'),
+                                            'updated_at': openapi.Schema(type=openapi.TYPE_STRING, format='date-time')
+                                        }
+                                    ),
+                                    'purchased_at': openapi.Schema(type=openapi.TYPE_STRING, format='date-time', nullable=True),
+                                    'payment_status': openapi.Schema(type=openapi.TYPE_STRING, nullable=True)
+                                }
+                            )
+                        )
                     }
                 )
             ),
@@ -366,13 +406,14 @@ class MyCoursesView(generics.ListAPIView):
         try:
             queryset = self.get_queryset()
             serializer = self.get_serializer(queryset, many=True)
+            message = 'Assigned courses retrieved successfully.' if request.user.role == 'teacher' else 'Purchased courses retrieved successfully.'
             return Response({
-                'message': 'Purchased courses retrieved successfully.',
+                'message': message,
                 'data': serializer.data
             }, status=status.HTTP_200_OK)
         except Exception as e:
-            logger.error(f"Purchased courses error: {str(e)}")
+            logger.error(f"Courses retrieval error for {request.user.role}: {str(e)}")
             return Response({
-                'error': 'Failed to retrieve purchased courses. Please try again.',
+                'error': 'Failed to retrieve courses. Please try again.',
                 'status': status.HTTP_500_INTERNAL_SERVER_ERROR
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

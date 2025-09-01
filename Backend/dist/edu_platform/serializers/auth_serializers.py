@@ -406,14 +406,7 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
     def validate_phone(self, value):
         """Ensures phone number is valid and not already registered."""
         logger.debug(f"Validating phone: {value}")
-        if not value.strip():
-            raise serializers.ValidationError({
-                'error': 'Phone number is required and cannot be blank.'
-            })
-        if not re.match(r'^\+?\d{10,15}$', value):
-            raise serializers.ValidationError({
-                'error': 'Invalid phone number. Must be 10-15 digits, optionally starting with +.'
-            })
+        value, _ = validate_identifier_utility(value, 'phone')
         if User.objects.filter(phone_number=value).exists():
             raise serializers.ValidationError({
                 'error': 'This phone number is already registered.'
@@ -490,7 +483,7 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
                     time_str = f"{assignment['weekdays_start']} to {assignment['weekdays_end']}"
                     schedule.append({
                         "type": "weekdays",
-                        "startDate": assignment['weekdays_start_date'].isoformat(),  # Now a date object
+                        "startDate": assignment['weekdays_start_date'].isoformat(),
                         "days": assignment['weekdays_days'],
                         "time": time_str
                     })
@@ -500,7 +493,7 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
                         time_str = f"{assignment['saturday_start']} to {assignment['saturday_end']}"
                         schedule.append({
                             "type": "weekends",
-                            "startDate": assignment['weekend_start_date'].isoformat(),  # Now a date object
+                            "startDate": assignment['weekend_start_date'].isoformat(),
                             "days": ["Saturday"],
                             "time": time_str
                         })
@@ -508,7 +501,7 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
                         time_str = f"{assignment['sunday_start']} to {assignment['sunday_end']}"
                         schedule.append({
                             "type": "weekends",
-                            "startDate": assignment['weekend_start_date'].isoformat(),  # Now a date object
+                            "startDate": assignment['weekend_start_date'].isoformat(),
                             "days": ["Sunday"],
                             "time": time_str
                         })
@@ -566,10 +559,7 @@ class AdminCreateSerializer(serializers.ModelSerializer):
     def validate_phone_number(self, value):
         """Ensures phone number is valid and not already registered if provided."""
         if value:
-            if not re.match(r'^\+?\d{10,15}$', value):
-                raise serializers.ValidationError({
-                    'error': 'Invalid phone number. Must be 10-15 digits, optionally starting with +.'
-                })
+            value, _ = validate_identifier_utility(value, 'phone')
             if User.objects.filter(phone_number=value).exists():
                 raise serializers.ValidationError({
                     'error': 'This phone number is already registered.'
@@ -823,13 +813,18 @@ class ForgotPasswordSerializer(serializers.Serializer):
         return attrs
 
     def save(self):
-        """Updates the user's password and marks OTP as verified."""
+        """Updates the user's password and deletes OTP."""
         user = self.validated_data['user']
         otp = self.validated_data['otp']
         user.set_password(self.validated_data['new_password'])
         user.save()
         otp.is_verified = True
         otp.save()
+        OTP.objects.filter(
+            identifier=self.validated_data['identifier'],
+            otp_type=self.initial_data['identifier_type'],
+            purpose='password_reset'
+        ).delete()
         return user
 
 
