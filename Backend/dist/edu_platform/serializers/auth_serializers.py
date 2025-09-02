@@ -306,7 +306,7 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
                 })
             # Validate fields based on batches
             if 'weekdays' in batches:
-                wk_req = ['weekdays_start_date', 'weekdays_days', 'weekdays_start', 'weekdays_end']
+                wk_req = ['weekdays_start_date', 'weekdays_end_date', 'weekdays_days', 'weekdays_start', 'weekdays_end']
                 if not all(key in assignment for key in wk_req):
                     raise serializers.ValidationError({
                         'error': f"For weekdays, require {wk_req}."
@@ -340,8 +340,24 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
                     raise serializers.ValidationError({
                         'error': 'Invalid weekdays_start_date format (YYYY-MM-DD).'
                     })
+
+                # Convert weekdays_end_date to date object
+                try:
+                    assignment['weekdays_end_date'] = datetime.strptime(
+                        assignment['weekdays_end_date'], '%Y-%m-%d'
+                    ).date()
+                except ValueError:
+                    raise serializers.ValidationError({
+                        'error': 'Invalid weekdays_end_date format (YYYY-MM-DD).'
+                    })
+
+                if assignment['weekdays_end_date'] < assignment['weekdays_start_date']:
+                    raise serializers.ValidationError({
+                        'error': 'weekdays_end_date must be after weekdays_start_date.'
+                    })
+                    
             if 'weekends' in batches:
-                we_req = ['weekend_start_date']
+                we_req = ['weekend_start_date', 'weekend_end_date']
                 if not all(key in assignment for key in we_req):
                     raise serializers.ValidationError({
                         'error': f"For weekends, require {we_req}."
@@ -381,6 +397,21 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
                 except ValueError:
                     raise serializers.ValidationError({
                         'error': 'Invalid weekend_start_date format (YYYY-MM-DD).'
+                    })
+                
+                # Convert weekend_end_date to date object
+                try:
+                    assignment['weekend_end_date'] = datetime.strptime(
+                        assignment['weekend_end_date'], '%Y-%m-%d'
+                    ).date()
+                except ValueError:
+                    raise serializers.ValidationError({
+                        'error': 'Invalid weekend_end_date format (YYYY-MM-DD).'
+                    })
+
+                if assignment['weekend_end_date'] < assignment['weekend_start_date']:
+                    raise serializers.ValidationError({
+                        'error': 'weekend_end_date must be after weekend_start_date.'
                     })
         # Check courses exist
         courses = Course.objects.filter(id__in=course_ids, is_active=True)
@@ -484,6 +515,7 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
                     schedule.append({
                         "type": "weekdays",
                         "startDate": assignment['weekdays_start_date'].isoformat(),
+                        "endDate": assignment['weekdays_end_date'].isoformat(),
                         "days": assignment['weekdays_days'],
                         "time": time_str
                     })
@@ -494,6 +526,7 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
                         schedule.append({
                             "type": "weekends",
                             "startDate": assignment['weekend_start_date'].isoformat(),
+                            "endDate": assignment['weekend_end_date'].isoformat(),
                             "days": ["Saturday"],
                             "time": time_str
                         })
@@ -502,6 +535,7 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
                         schedule.append({
                             "type": "weekends",
                             "startDate": assignment['weekend_start_date'].isoformat(),
+                            "endDate": assignment['weekend_end_date'].isoformat(),
                             "days": ["Sunday"],
                             "time": time_str
                         })

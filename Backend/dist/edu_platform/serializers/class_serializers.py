@@ -49,9 +49,9 @@ class ClassScheduleSerializer(serializers.ModelSerializer):
         valid_weekday_days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
         valid_weekend_days = ['Saturday', 'Sunday']
         for entry in value:
-            if not isinstance(entry, dict) or not all(k in entry for k in ['type', 'startDate', 'days', 'time']):
+            if not isinstance(entry, dict) or not all(k in entry for k in ['type', 'startDate', 'endDate', 'days', 'time']):
                 raise serializers.ValidationError({
-                    'error': 'Each schedule entry must have type, startDate, days, time.'
+                    'error': 'Each schedule entry must have type, startDate, endDate, days, time.'
                 })
             if entry['type'] not in valid_types:
                 raise serializers.ValidationError({
@@ -83,9 +83,10 @@ class ClassScheduleSerializer(serializers.ModelSerializer):
                 })
             try:
                 datetime.strptime(entry['startDate'], '%Y-%m-%d')
+                datetime.strptime(entry['endDate'], '%Y-%m-%d')
             except ValueError:
                 raise serializers.ValidationError({
-                    'error': 'Invalid startDate format (YYYY-MM-DD).'
+                    'error': 'Invalid startDate or endDate  format (YYYY-MM-DD).'
                 })
         return value
 

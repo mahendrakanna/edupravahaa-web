@@ -352,7 +352,8 @@ class MyCoursesView(generics.ListAPIView):
                                                         'days': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Items(type=openapi.TYPE_STRING)),
                                                         'time': openapi.Schema(type=openapi.TYPE_STRING),
                                                         'type': openapi.Schema(type=openapi.TYPE_STRING),
-                                                        'startDate': openapi.Schema(type=openapi.TYPE_STRING)
+                                                        'startDate': openapi.Schema(type=openapi.TYPE_STRING),
+                                                        'endDate': openapi.Schema(type=openapi.TYPE_STRING)
                                                     }
                                                 )
                                             ),

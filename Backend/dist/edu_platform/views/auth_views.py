@@ -313,11 +313,6 @@ class RegisterView(generics.CreateAPIView):
         response_data = {
             'message': 'Registration successful! Please login to continue.',
         }
-        if user.role == 'student' and user.trial_end_date:
-            response_data['trial_info'] = {
-                'trial_ends_at': user.trial_end_date.isoformat(),
-                'trial_duration_seconds': user.trial_remaining_seconds
-            }
         
         return Response(response_data, status=status.HTTP_201_CREATED)
 
