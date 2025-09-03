@@ -45,6 +45,7 @@ import illustrationsDark from '@src/assets/images/pages/login-v2-dark.svg'
 // ** Styles
 import '@styles/react/pages/page-authentication.scss'
 import { getProfile, loginUser } from '../../../redux/authentication'
+import { fetchMyCourses } from '../../../redux/coursesSlice'
 
 const ToastContent = ({ t, name, role }) => {
   return (
@@ -94,8 +95,8 @@ const onSubmit = (data) => {
           dispatch(getProfile())
             .unwrap()
             .then(profile => {
-              const fullUser = { ...profile, accessToken: res.access, refreshToken: res.refresh };
-              localStorage.setItem("userData", JSON.stringify(fullUser));
+              const fullUser = { ...profile.data, accessToken: res.access, refreshToken: res.refresh };
+              console.log('Full User Data:', fullUser);
                navigate(getHomeRouteForLoggedInUser(fullUser.role))
               toast(t => (
                 <ToastContent
@@ -111,6 +112,7 @@ const onSubmit = (data) => {
                 message: 'Failed to fetch profile. Try again.'
               });
             });
+            dispatch(fetchMyCourses())
         } else {
           setError('loginEmail', {
             type: 'manual',

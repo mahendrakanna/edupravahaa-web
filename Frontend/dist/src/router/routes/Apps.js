@@ -6,12 +6,18 @@ import MyCourses from '../../views/apps/mycourses'
 
 
 const Calendar = lazy(() => import('../../views/apps/calendar'))
+// const DashboardAnalytics = lazy(() => import('../../views/dashboard/analytics'))
+const DashboardEcommerce = lazy(() => import('../../views/dashboard/ecommerce'))
 
 
 const AppRoutes = [
   {
     element: <Calendar />,
-    path: '/apps/calendar'
+    path: '/calendar'
+  },
+  {
+    element: <DashboardEcommerce />,
+    path: '/dashboard'
   },
 
   {

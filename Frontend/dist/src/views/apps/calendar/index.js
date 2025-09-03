@@ -1,79 +1,106 @@
 // ** React Imports
 import { Fragment, useState, useEffect } from 'react'
-
-// ** Third Party Components
 import classnames from 'classnames'
 import { Row, Col } from 'reactstrap'
-
-// ** Calendar App Component Imports
 import Calendar from './Calendar'
 import SidebarLeft from './SidebarLeft'
-import AddEventSidebar from './AddEventSidebar'
-
-// ** Custom Hooks
+import { useSelector, useDispatch } from 'react-redux'
+import { updateFilter, updateAllFilters } from './store'
+import '@styles/react/apps/app-calendar.scss'
+import { fetchMyCourses } from '../../../redux/coursesSlice'
 import { useRTL } from '@hooks/useRTL'
 
-// ** Store & Actions
-import { useSelector, useDispatch } from 'react-redux'
-import { fetchEvents, selectEvent, updateEvent, updateFilter, updateAllFilters, addEvent, removeEvent } from './store'
-
-// ** Styles
-import '@styles/react/apps/app-calendar.scss'
-
-// ** CalendarColors
-const calendarsColor = {
-  Business: 'primary',
-  Holiday: 'success',
-  Personal: 'danger',
-  Family: 'warning',
-  ETC: 'info'
-}
-
 const CalendarComponent = () => {
-  // ** Variables
   const dispatch = useDispatch()
   const store = useSelector(state => state.calendar)
+  const { mycourseslist } = useSelector((state) => state.courses)
 
-  // ** states
   const [calendarApi, setCalendarApi] = useState(null)
-  const [addSidebarOpen, setAddSidebarOpen] = useState(false)
   const [leftSidebarOpen, setLeftSidebarOpen] = useState(false)
-
-  // ** Hooks
   const [isRtl] = useRTL()
 
-  // ** AddEventSidebar Toggle Function
-  const handleAddEventSidebar = () => setAddSidebarOpen(!addSidebarOpen)
-
-  // ** LeftSidebar Toggle Function
   const toggleSidebar = val => setLeftSidebarOpen(val)
 
-  // ** Blank Event Object
   const blankEvent = {
     title: '',
     start: '',
     end: '',
     allDay: false,
     url: '',
-    extendedProps: {
-      calendar: '',
-      guests: [],
-      location: '',
-      description: ''
-    }
+    extendedProps: { courseId: '', courseName: '' }
   }
 
-  // ** refetchEvents
-  const refetchEvents = () => {
-    if (calendarApi !== null) {
-      calendarApi.refetchEvents()
-    }
-  }
-
-  // ** Fetch Events On Mount
+  // fetch courses on mount
   useEffect(() => {
-    dispatch(fetchEvents(store.selectedCalendars))
-  }, [])
+    dispatch(fetchMyCourses())
+  }, [dispatch])
+
+  // default select all when courses load
+  useEffect(() => {
+    if (mycourseslist?.length > 0) {
+      dispatch(updateAllFilters({ all: true, mycourseslist }))
+    }
+  }, [mycourseslist, dispatch])
+
+  // helper: build schedule dates
+  function getScheduleDates(schedule) {
+    const result = []
+    schedule.forEach(sch => {
+      const start = new Date(sch.startDate)
+      const end = new Date(sch.endDate)
+      let current = new Date(start)
+      const daysOfWeek = sch.days.map(day => day.toLowerCase())
+      while (current <= end) {
+        const dayName = current.toLocaleString('en-US', { weekday: 'long' }).toLowerCase()
+        if (daysOfWeek.includes(dayName)) {
+          result.push({
+            date: current.toISOString().split('T')[0],
+            time: sch.time,
+            type: sch.type
+          })
+        }
+        current.setDate(current.getDate() + 1)
+      }
+    })
+    return result
+  }
+
+  // helper: convert to 24h
+  function convertTo24Hour(timeStr) {
+    const [time, modifier] = timeStr.split(' ')
+    let [hours, minutes] = time.split(':')
+    hours = parseInt(hours, 10)
+    if (modifier === 'PM' && hours < 12) hours += 12
+    if (modifier === 'AM' && hours === 12) hours = 0
+    return `${hours.toString().padStart(2, '0')}:${minutes}:00`
+  }
+
+  // build events from courses
+  const courseEvents = mycourseslist?.flatMap(courseObj => {
+    const course = courseObj.course
+    const dates = getScheduleDates(course.schedule)
+
+    return dates.map(d => {
+      const [startTime, endTime] = d.time.split(' to ')
+      return {
+        title: `${course.name} – ${startTime}`,
+        start: `${d.date}T${convertTo24Hour(startTime)}`,
+        end: `${d.date}T${convertTo24Hour(endTime)}`,
+        extendedProps: { 
+          courseId: course.id,
+          courseName: course.name,
+          scheduleType: d.type
+        }
+      }
+    })
+  }) || []
+
+  // filter by selected courses
+  const filteredEvents = courseEvents.filter(
+    event => store.selectedCalendars.includes(event.extendedProps.courseId)
+  )
+
+  const eventsToShow = store.selectedCalendars.length > 0 ? filteredEvents : courseEvents
 
   return (
     <Fragment>
@@ -91,45 +118,28 @@ const CalendarComponent = () => {
               updateFilter={updateFilter}
               toggleSidebar={toggleSidebar}
               updateAllFilters={updateAllFilters}
-              handleAddEventSidebar={handleAddEventSidebar}
+              mycourseslist={mycourseslist}
             />
           </Col>
           <Col className='position-relative'>
             <Calendar
               isRtl={isRtl}
               store={store}
+              events={eventsToShow}
               dispatch={dispatch}
               blankEvent={blankEvent}
               calendarApi={calendarApi}
-              selectEvent={selectEvent}
-              updateEvent={updateEvent}
               toggleSidebar={toggleSidebar}
-              calendarsColor={calendarsColor}
               setCalendarApi={setCalendarApi}
-              handleAddEventSidebar={handleAddEventSidebar}
+              mycourseslist={mycourseslist}
             />
           </Col>
           <div
-            className={classnames('body-content-overlay', {
-              show: leftSidebarOpen === true
-            })}
+            className={classnames('body-content-overlay', { show: leftSidebarOpen === true })}
             onClick={() => toggleSidebar(false)}
           ></div>
         </Row>
       </div>
-      <AddEventSidebar
-        store={store}
-        dispatch={dispatch}
-        addEvent={addEvent}
-        open={addSidebarOpen}
-        selectEvent={selectEvent}
-        updateEvent={updateEvent}
-        removeEvent={removeEvent}
-        calendarApi={calendarApi}
-        refetchEvents={refetchEvents}
-        calendarsColor={calendarsColor}
-        handleAddEventSidebar={handleAddEventSidebar}
-      />
     </Fragment>
   )
 }

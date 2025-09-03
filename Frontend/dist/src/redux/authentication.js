@@ -158,6 +158,53 @@ export const refreshTokenThunk = createAsyncThunk(
   }
 );
 
+// update password api
+export const updatePassword = createAsyncThunk(
+  'auth/updatePassword',
+  async (payload, { rejectWithValue, getState }) => {
+    try {
+      const token = getState().auth.token
+      const response = await axios.put(
+        API_URL + apiList.auth.updatePassword,
+        payload,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      )
+      return response.data
+    } catch (err) {
+      return rejectWithValue(err.response?.data || err.message)
+    }
+  }
+)
+
+
+
+// ** Update Profile
+export const updateProfile = createAsyncThunk(
+  'auth/updateProfile',
+  async (payload, { rejectWithValue, getState }) => {
+    try {
+      const token = getState().auth.token
+      const response = await axios.put(
+        API_URL + apiList.auth.getProfile, 
+        payload,
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      )
+      return response.data
+    } catch (err) {
+      return rejectWithValue(err.response?.data || err.message)
+    }
+  }
+)
 
 
 
@@ -211,6 +258,20 @@ const authSlice = createSlice({
       state.error = action.payload;
     });
 
+      // --- Send OTP
+      builder.addCase(sendOtp.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      });
+      builder.addCase(sendOtp.fulfilled, (state, action) => {
+        state.loading = false;
+        state.success = true;       // ✅ request succeeded
+      });
+      builder.addCase(sendOtp.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      });
+
     // Login
     builder.addCase(loginUser.pending, (state) => {
       state.loading = true;
@@ -251,7 +312,8 @@ const authSlice = createSlice({
     });
     builder.addCase(getProfile.fulfilled, (state, action) => {
       state.loading = false;
-      state.user = action.payload;
+      state.user = action.payload.data;
+      localStorage.setItem("userData", JSON.stringify(action.payload.data));
     });
     builder.addCase(getProfile.rejected, (state, action) => {
       state.loading = false;
@@ -333,6 +395,36 @@ const authSlice = createSlice({
       localStorage.removeItem('refresh');
       localStorage.removeItem('userData');
     });
+
+    // Update Password
+  builder.addCase(updatePassword.pending, (state) => {
+    state.loading = true
+    state.error = null
+  })
+  builder.addCase(updatePassword.fulfilled, (state, action) => {
+    state.loading = false
+    state.success = true
+  })
+  builder.addCase(updatePassword.rejected, (state, action) => {
+    state.loading = false
+    state.error = action.payload
+  })
+
+  // Update Profile
+  builder.addCase(updateProfile.pending, (state) => {
+    state.loading = true
+    state.error = null
+  })
+  builder.addCase(updateProfile.fulfilled, (state, action) => {
+    state.loading = false
+    state.user = action.payload.data 
+    localStorage.setItem('userData', JSON.stringify(action.payload.data))
+  })
+  builder.addCase(updateProfile.rejected, (state, action) => {
+    state.loading = false
+    state.error = action.payload
+  })
+
   
   },
   

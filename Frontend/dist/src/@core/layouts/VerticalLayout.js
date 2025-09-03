@@ -157,16 +157,10 @@ useEffect(() => {
     static: 'navbar-static',
     hidden: 'navbar-hidden'
   }
-
-  const navbarClasses = {
-    floating: contentWidth === 'boxed' ? 'floating-nav container-xxl' : 'floating-nav',
-    sticky: 'fixed-top',
-    static: 'navbar-static-top',
-    hidden: 'd-none'
-  }
+//  console.log('VerticalLayout mounted',menuData)
 
   const bgColorCondition = navbarColor !== '' && navbarColor !== 'light' && navbarColor !== 'white'
-
+  
   if (!isMounted) {
     return null
   }

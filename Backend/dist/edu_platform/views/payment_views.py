@@ -305,7 +305,7 @@ class VerifyPaymentView(BaseAPIView):
                 'razorpay_signature': signature
             }
 
-            if settings.DEBUG and "fake_secret_for_testing" == 'fake_secret_for_testing':
+            if settings.DEBUG and settings.RAZORPAY_KEY_SECRET == 'fake_secret_for_testing':
                 logger.info(f"Skipping signature verification for subscription {subscription.id} in test mode")
             else:
                 try:

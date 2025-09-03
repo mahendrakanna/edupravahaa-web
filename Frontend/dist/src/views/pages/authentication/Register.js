@@ -7,7 +7,7 @@ import { useSkin } from '@hooks/useSkin'
 import useJwt from '@src/auth/jwt/useJwt'
 
 // ** Store & Actions
-import { useDispatch } from 'react-redux'
+import { useDispatch, useSelector } from 'react-redux'
 
 
 // ** Third Party Components
@@ -30,6 +30,7 @@ import {
   Button,
   CardTitle,
   FormFeedback,
+  Spinner,
  
 } from "reactstrap"
 
@@ -72,6 +73,7 @@ const Register = () => {
   const [isEmailVerified, setIsEmailVerified] = useState(false);
   const [isPhoneVerified, setIsPhoneVerified] = useState(false);
   const [otpSentSuccess, setOtpSentSuccess] = useState(false);
+  const { loading } = useSelector(state => state.auth)
 
   console.log("errors", errors)
 
@@ -101,7 +103,7 @@ const isPhoneValid = phonePattern.test(watchedPhone)
         username: data.username,
         email: data.email,
         password: data.password,
-        password_confirm: data.confirmpassword,
+        confirm_password: data.confirmpassword,
         phone_number: `+91${data?.phone}`,
       }
       dispatch(signupUser(payload))
@@ -189,7 +191,7 @@ const isPhoneValid = phonePattern.test(watchedPhone)
       toast.error(err.error || "Invalid OTP")
     })
   }
-  
+  console.log("loading:", loading)
   return (
  <div className="auth-wrapper auth-cover">
       <Row className="auth-inner m-0">
@@ -258,14 +260,14 @@ const isPhoneValid = phonePattern.test(watchedPhone)
                 />
               ) : (
                 <Button
-                  type="button"
-                  color="link"
-                  disabled={!isEmailValid}
-                  className="position-absolute top-50 end-0 translate-middle-y me-1"
-                  onClick={() => handleSendOtp("email", watchedEmail)}
-                >
-                  Verify
-                </Button>
+                    type="button"
+                    color="link"
+                    disabled={!isEmailValid || loading}
+                    className="position-absolute top-50 end-0 translate-middle-y me-1"
+                    onClick={() => handleSendOtp("email", watchedEmail)}
+                  >
+                    {loading ? <Spinner size="sm" /> : "Verify"}
+                  </Button>
               )}
                 {/* {errors.email && <FormFeedback>{errors.email.message}</FormFeedback>} */}
 
@@ -278,8 +280,12 @@ const isPhoneValid = phonePattern.test(watchedPhone)
                   value={otp}
                   onChange={(e) => setOtp(e.target.value)}
                 />
-                <Button color="primary" onClick={handleVerifyOtp}>
-                  Verify OTP
+               <Button 
+                  color="primary" 
+                  onClick={handleVerifyOtp}
+                  disabled={loading} 
+                >
+                  {loading ? <Spinner size="sm" /> : "Verify OTP"}
                 </Button>
               </div>
             )}
@@ -340,8 +346,13 @@ const isPhoneValid = phonePattern.test(watchedPhone)
                       value={otp}
                       onChange={(e) => setOtp(e.target.value)}
                     />
-                    <Button color="primary" className="ms-1" onClick={handleVerifyOtp}>
-                      Submit
+                    <Button 
+                      color="primary" 
+                      className="ms-1" 
+                      onClick={handleVerifyOtp}
+                      disabled={loading}
+                    >
+                      {loading ? <Spinner size="sm" /> : "Submit"}
                     </Button>
                   </div>
                 )}

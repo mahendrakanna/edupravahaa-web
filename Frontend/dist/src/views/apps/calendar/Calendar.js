@@ -1,8 +1,7 @@
-// ** React Import
 import { useEffect, useRef, memo } from 'react'
 
 // ** Full Calendar & it's Plugins
-// import '@fullcalendar/react/dist/vdom'
+import '@fullcalendar/react/dist/vdom'
 import FullCalendar from '@fullcalendar/react'
 import listPlugin from '@fullcalendar/list'
 import dayGridPlugin from '@fullcalendar/daygrid'
@@ -10,95 +9,67 @@ import timeGridPlugin from '@fullcalendar/timegrid'
 import interactionPlugin from '@fullcalendar/interaction'
 
 // ** Third Party Components
-import toast from 'react-hot-toast'
 import { Menu } from 'react-feather'
 import { Card, CardBody } from 'reactstrap'
+import tippy from 'tippy.js'
+import 'tippy.js/dist/tippy.css'
+import { useNavigate } from "react-router-dom";
 
 const Calendar = props => {
-  // ** Refs
   const calendarRef = useRef(null)
+  const navigate = useNavigate();
 
-  // ** Props
   const {
-    store,
+    events,
     isRtl,
-    dispatch,
-    calendarsColor,
     calendarApi,
     setCalendarApi,
-    handleAddEventSidebar,
-    blankEvent,
     toggleSidebar,
-    selectEvent,
-    updateEvent
+    mycourseslist
   } = props
 
-  // ** UseEffect checks for CalendarAPI Update
+  const courseColors = {}
+  const colors = ['primary', 'success', 'danger', 'warning', 'info', 'secondary']
+  mycourseslist?.forEach((courseObj, i) => {
+    courseColors[courseObj.course.id] = colors[i % colors.length]
+  })
+
   useEffect(() => {
     if (calendarApi === null) {
       setCalendarApi(calendarRef.current.getApi())
     }
   }, [calendarApi])
 
-  // ** calendarOptions(Props)
   const calendarOptions = {
-    events: store.events.length ? store.events : [],
+    events: events || [],
     plugins: [interactionPlugin, dayGridPlugin, timeGridPlugin, listPlugin],
     initialView: 'dayGridMonth',
     headerToolbar: {
       start: 'sidebarToggle, prev,next, title',
       end: 'dayGridMonth,timeGridWeek,timeGridDay,listMonth'
     },
-    /*
-      Enable dragging and resizing event
-      ? Docs: https://fullcalendar.io/docs/editable
-    */
-    editable: true,
-
-    /*
-      Enable resizing event from start
-      ? Docs: https://fullcalendar.io/docs/eventResizableFromStart
-    */
-    eventResizableFromStart: true,
-
-    /*
-      Automatically scroll the scroll-containers during event drag-and-drop and date selecting
-      ? Docs: https://fullcalendar.io/docs/dragScroll
-    */
-    dragScroll: true,
-
-    /*
-      Max number of events within a given day
-      ? Docs: https://fullcalendar.io/docs/dayMaxEvents
-    */
+    editable: false,
     dayMaxEvents: 2,
-
-    /*
-      Determines if day names and week names are clickable
-      ? Docs: https://fullcalendar.io/docs/navLinks
-    */
     navLinks: true,
 
-    eventClassNames({ event: calendarEvent }) {
-      // eslint-disable-next-line no-underscore-dangle
-      const colorName = calendarsColor[calendarEvent._def.extendedProps.calendar]
-
-      return [
-        // Background Color
-        `bg-light-${colorName}`
-      ]
+    eventClassNames({ event }) {
+      const courseId = event.extendedProps.courseId
+      const colorName = courseColors[courseId] || 'primary'
+      return [`bg-light-${colorName}`, 'fc-event-custom']
     },
 
-    eventClick({ event: clickedEvent }) {
-      dispatch(selectEvent(clickedEvent))
-      handleAddEventSidebar()
+    eventClick({ event }) {
+      const courseId = event.extendedProps.courseId
+      console.log('Event clicked:', event)
+      navigate(`/live-class/${courseId}`)
+    },
 
-      // * Only grab required field otherwise it goes in infinity loop
-      // ! Always grab all fields rendered by form (even if it get `undefined`) otherwise due to Vue3/Composition API you might get: "object is not extensible"
-      // event.value = grabEventDataFromEventApi(clickedEvent)
-
-      // eslint-disable-next-line no-use-before-define
-      // isAddNewEventSidebarActive.value = true
+    eventDidMount(info) {
+      tippy(info.el, {
+        content: info.event.title,
+        placement: 'top',
+        arrow: true
+      })
     },
 
     customButtons: {
@@ -110,43 +81,14 @@ const Calendar = props => {
       }
     },
 
-    dateClick(info) {
-      const ev = blankEvent
-      ev.start = info.date
-      ev.end = info.date
-      dispatch(selectEvent(ev))
-      handleAddEventSidebar()
-    },
-
-    /*
-      Handle event drop (Also include dragged event)
-      ? Docs: https://fullcalendar.io/docs/eventDrop
-      ? We can use `eventDragStop` but it doesn't return updated event so we have to use `eventDrop` which returns updated event
-    */
-    eventDrop({ event: droppedEvent }) {
-      dispatch(updateEvent(droppedEvent))
-      toast.success('Event Updated')
-    },
-
-    /*
-      Handle event resize
-      ? Docs: https://fullcalendar.io/docs/eventResize
-    */
-    eventResize({ event: resizedEvent }) {
-      dispatch(updateEvent(resizedEvent))
-      toast.success('Event Updated')
-    },
-
     ref: calendarRef,
-
-    // Get direction from app state (store)
     direction: isRtl ? 'rtl' : 'ltr'
   }
 
   return (
     <Card className='shadow-none border-0 mb-0 rounded-0'>
       <CardBody className='pb-0'>
-        <FullCalendar {...calendarOptions} />{' '}
+        <FullCalendar {...calendarOptions} />
       </CardBody>
     </Card>
   )
