@@ -25,16 +25,42 @@ import phonenumbers
 logger = logging.getLogger(__name__)
 
 def get_serializer_error_message(errors):
-    """Utility to extract error message from serializer errors."""
-    if 'non_field_errors' in errors:
-        return errors['non_field_errors'][0]
-    for field, error in errors.items():
-        if isinstance(error, dict) and 'error' in error:
-            return error['error']
-        elif isinstance(error, list):
-            return error[0]
-        return str(error)
-    return 'Invalid input data.'
+    """Extracts the first error message from serializer errors, including field name if applicable."""
+    if isinstance(errors, dict):
+        for field, error in errors.items():
+            if field == 'non_field_errors':
+                # Handle non-field errors (e.g., from validate method)
+                if isinstance(error, list) and error:
+                    if isinstance(error[0], dict):
+                        # Check for 'error' or 'message' key
+                        return error[0].get('error', error[0].get('message', str(error[0])))
+                    return str(error[0])  # Fallback for unexpected structure
+            else:
+                # Handle field-specific errors
+                if isinstance(error, list) and error:
+                    if isinstance(error[0], dict):
+                        # Check for 'error' or 'message' key
+                        return error[0].get('error', error[0].get('message', str(error[0])))
+                    error_msg = str(error[0])
+                    # Customize default DRF messages to include field name
+                    field_name = field.replace('_', ' ').title()
+                    if error_msg == 'This field may not be blank.':
+                        return f"{field_name} cannot be empty."
+                    if error_msg == 'This field is required.':
+                        return f"{field_name} is required."
+                    if error_msg == 'Ensure this field has at least 8 characters.':
+                        return f"{field_name} must be at least 8 characters long."
+                    return f"{field_name}: {error_msg}"
+                elif isinstance(error, dict):
+                    # Direct dictionary error
+                    return error.get('error', error.get('message', str(error)))
+                return f"{field.replace('_', ' ').title()}: {str(error)}"
+    elif isinstance(errors, list) and errors:
+        # Handle list of errors (unlikely)
+        if isinstance(errors[0], dict):
+            return errors[0].get('error', errors[0].get('message', str(errors[0])))
+        return str(errors[0])
+    return 'Invalid input provided.'
 
 class SendOTPView(generics.GenericAPIView):
     """Sends OTP to email or phone for verification."""
@@ -866,7 +892,7 @@ class ChangePasswordView(generics.UpdateAPIView):
                     type=openapi.TYPE_OBJECT,
                     properties={
                         'message': openapi.Schema(type=openapi.TYPE_STRING),
-                        'status': openapi.Schema(type=openapi.TYPE_INTEGER, description="HTTP status code")
+                        'message_type': openapi.Schema(type=openapi.TYPE_STRING, enum=['success', 'error'])
                     }
                 )
             ),
@@ -875,8 +901,18 @@ class ChangePasswordView(generics.UpdateAPIView):
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'error': openapi.Schema(type=openapi.TYPE_STRING),
-                        'status': openapi.Schema(type=openapi.TYPE_INTEGER, description="HTTP status code")
+                        'message': openapi.Schema(type=openapi.TYPE_STRING),
+                        'message_type': openapi.Schema(type=openapi.TYPE_STRING, enum=['success', 'error'])
+                    }
+                )
+            ),
+            401: openapi.Response(
+                description="Unauthorized",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'message': openapi.Schema(type=openapi.TYPE_STRING),
+                        'message_type': openapi.Schema(type=openapi.TYPE_STRING, enum=['success', 'error'])
                     }
                 )
             ),
@@ -885,8 +921,8 @@ class ChangePasswordView(generics.UpdateAPIView):
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'error': openapi.Schema(type=openapi.TYPE_STRING),
-                        'status': openapi.Schema(type=openapi.TYPE_INTEGER, description="HTTP status code")
+                        'message': openapi.Schema(type=openapi.TYPE_STRING),
+                        'message_type': openapi.Schema(type=openapi.TYPE_STRING, enum=['success', 'error'])
                     }
                 )
             )
@@ -894,25 +930,25 @@ class ChangePasswordView(generics.UpdateAPIView):
     )
     def update(self, request, *args, **kwargs):
         """Updates user's password."""
-        # Validate password change data
         serializer = self.get_serializer(data=request.data)
         if not serializer.is_valid():
+            logger.error(f"Serializer errors: {serializer.errors}")  # Log errors for debugging
             return Response({
-                'error': get_serializer_error_message(serializer.errors),
-                'status': status.HTTP_400_BAD_REQUEST
+                'message': get_serializer_error_message(serializer.errors),
+                'message_type': 'error'
             }, status=status.HTTP_400_BAD_REQUEST)
         
         try:
             serializer.save()
             return Response({
-                'message': 'Password changed successfully.',
-                'status': status.HTTP_200_OK
+                'message': 'Password updated successfully.',
+                'message_type': 'success'
             }, status=status.HTTP_200_OK)
         except Exception as e:
             logger.error(f"Password change error: {str(e)}")
             return Response({
-                'error': 'Failed to change password. Please try again.',
-                'status': status.HTTP_500_INTERNAL_SERVER_ERROR
+                'message': 'Failed to update password. Please try again.',
+                'message_type': 'error'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     def get_object(self):

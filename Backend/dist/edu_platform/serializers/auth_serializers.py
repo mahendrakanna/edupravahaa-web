@@ -632,15 +632,42 @@ class ChangePasswordSerializer(serializers.Serializer):
     
     def validate_old_password(self, value):
         """Verifies the old password is correct."""
+        if not value:
+            raise serializers.ValidationError({
+                'message': 'Old password cannot be empty.',
+                'message_type': 'error'
+            })
         user = self.context.get('request').user
         if not user.check_password(value):
             raise serializers.ValidationError({
-                'error': 'Old password is incorrect.'
+                'message': 'Old password is incorrect.',
+                'message_type': 'error'
             })
         return value
     
     def validate_new_password(self, value):
-        return validate_password_utility(value)
+        """Validates new password complexity."""
+        if not value:
+            raise serializers.ValidationError({
+                'message': 'New password cannot be empty.',
+                'message_type': 'error'
+            })
+        try:
+            return validate_password_utility(value)
+        except Exception as e:
+            raise serializers.ValidationError({
+                'message': str(e) if str(e) else 'New password does not meet complexity requirements.',
+                'message_type': 'error'
+            })
+    
+    def validate_confirm_password(self, value):
+        """Ensures confirm password is not empty."""
+        if not value:
+            raise serializers.ValidationError({
+                'message': 'Confirm password cannot be empty.',
+                'message_type': 'error'
+            })
+        return value
     
     def validate(self, attrs):
         """Ensures new password and confirm password match."""
