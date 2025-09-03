@@ -75,7 +75,7 @@ const ForgotPassword = () => {
       setStep(2)
     })
     .catch((err) => {
-      toast.error(err?.message || err || "Failed to send OTP ❌")
+      toast.error(err?.error || err || "Failed to send OTP ❌")
     })
 }
 
@@ -110,7 +110,7 @@ const handleVerifyOtp = (e) => {
       setStep(3)
     })
     .catch((err) => {
-      toast.error(err?.message || err || "Invalid OTP ❌")
+      toast.error(err?.error || err || "Invalid OTP ❌")
       setErrors({ otp: "Invalid OTP" })
     })
 }

@@ -15,16 +15,22 @@ import {
   ModalBody,
   ModalFooter,
   ListGroup,
-  ListGroupItem
+  ListGroupItem,
+  Badge
 } from "reactstrap"
 import { FaCheckCircle, FaChartLine, FaClock } from "react-icons/fa"
 import toast from "react-hot-toast"
 import "./CourseCard.css"
 import { fetchCourses } from "../../../redux/coursesSlice"
+import { getTrialPeriod } from "../../../redux/authentication"
 
 const CourseCard = ({ course }) => {
   const [modal, setModal] = useState(false)
-  const toggle = () => setModal(!modal)
+  const [selectedBatch, setSelectedBatch] = useState(null) // Track batch selection
+  const toggle = () => {
+    setModal(!modal)
+    setSelectedBatch(null) // reset when modal closed
+  }
 
   const token = useSelector((state) => state.auth.token)
   const razorpay_key = import.meta.env.VITE_RAZORPAY_KEY
@@ -33,14 +39,23 @@ const CourseCard = ({ course }) => {
   const dispatch = useDispatch()
 
   const handleEnroll = async () => {
+    if (!selectedBatch) {
+      toast.error("Please select a batch before enrolling")
+      return
+    }
+
     try {
       const orderResponse = await axios.post(
         `${BaseUrl}/api/payments/create_order/`,
-        { course_id: course.id },
+        { 
+          course_id: course.id, 
+          batch: selectedBatch.type 
+        },
         { headers: { Authorization: `Bearer ${token}` } }
       )
 
-      const orderData = orderResponse.data
+      const orderData = orderResponse.data.data
+      console.log("orderData",orderData)
       const options = {
         key: razorpay_key,
         amount: orderData.amount,
@@ -49,7 +64,7 @@ const CourseCard = ({ course }) => {
         description: course.description,
         order_id: orderData.order_id,
         handler: async function (response) {
-          console.log("Payment response:", response)
+          console.log("Razorpay response:", response)
           try {
             const verifyRes = await axios.post(
               `${BaseUrl}/api/payments/verify_payment/`,
@@ -64,7 +79,8 @@ const CourseCard = ({ course }) => {
 
             toast.success("✅ Payment verified successfully!")
             dispatch(fetchCourses())
-            setModal(false) 
+            dispatch(getTrialPeriod())
+            setModal(false)
             // navigate("/mycourses", { replace: true }) 
           } catch (error) {
             console.error("Verification error:", error)
@@ -87,6 +103,16 @@ const CourseCard = ({ course }) => {
     }
   }
 
+const groupedBatches = course.schedule?.reduce((acc, batch) => {
+  if (!acc[batch.type]) {
+    acc[batch.type] = { ...batch, sessions: [{ day: batch.days[0], time: batch.time }] }
+  } else {
+    acc[batch.type].sessions.push({ day: batch.days[0], time: batch.time })
+  }
+  return acc
+}, {})
+
+const batchList = Object.values(groupedBatches)
   return (
     <>
       <Card className="shadow-sm h-100 course-card">
@@ -105,11 +131,7 @@ const CourseCard = ({ course }) => {
             {course.name}
           </CardTitle>
           <CardText className="text-muted">{course.description}</CardText>
-          <div className="d-flex justify-content-between mt-2">
-            <span>
-              <FaClock className="me-1 text-secondary" />
-              {course.duration_hours} hrs
-            </span>
+          <div className="d-flex justify-content-end mt-2">
             <span>
               <FaChartLine className="text-primary me-1" />
               ₹{course.base_price}
@@ -143,7 +165,56 @@ const CourseCard = ({ course }) => {
             ))}
           </ListGroup>
 
-          <div className="mt-4 d-flex justify-content-between">
+          {/* ✅ Batch Selection */}
+          <h6 className="fw-bold mt-1">Available Batches:</h6>
+          <div className="d-flex gap-1 flex-wrap">
+            {batchList.map((batch, idx) => (
+              <Button
+                key={idx}
+                outline
+                color={selectedBatch?.type === batch.type ? "primary" : "secondary"}
+                onClick={() => setSelectedBatch(batch)}
+              >
+                {batch.type.charAt(0).toUpperCase() + batch.type.slice(1)}
+              </Button>
+            ))}
+          </div>
+
+          {/* ✅ Show selected batch details */}
+          {selectedBatch && (
+            <div className="mt-1 p-1 border rounded bg-light">
+              <h6 className="fw-bold">Schedule Details:</h6>
+              <div>
+                {selectedBatch.sessions.map((s, i) => (
+                  <p key={i} className="mb-1">
+                    <FaClock className="me-2 text-secondary" />
+                    {s.day}: {s.time}
+                  </p>
+                ))}
+              </div>
+                <div className="d-flex justify-content-between align-items-center mt-2">
+                <Badge color="info"  className="px-1 py-1">
+                  📅 Starts:{" "}
+                  {new Date(selectedBatch.startDate).toLocaleDateString("en-US", {
+                    day: "2-digit",
+                    month: "long",
+                    year: "numeric",
+                  })}
+                </Badge>
+                <Badge color="warning"  className="px-1 py-1">
+                  🏁 Ends:{" "}
+                  {new Date(selectedBatch.endDate).toLocaleDateString("en-US", {
+                    day: "2-digit",
+                    month: "long",
+                    year: "numeric",
+                  })}
+                </Badge>
+              </div>
+
+            </div>
+          )}
+
+          <div className="mt-1 d-flex justify-content-between">
             <span>
               <FaClock className="me-2 text-secondary" />
               Duration: {course.duration_hours} hrs
@@ -158,7 +229,11 @@ const CourseCard = ({ course }) => {
           <Button color="secondary" onClick={toggle}>
             Close
           </Button>
-          <Button color="primary" onClick={handleEnroll}>
+          <Button 
+            color="primary" 
+            onClick={handleEnroll} 
+            disabled={!selectedBatch} 
+          >
             Enroll Now
           </Button>
         </ModalFooter>

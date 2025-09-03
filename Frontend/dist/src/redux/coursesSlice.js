@@ -29,7 +29,7 @@ export const fetchCourses = createAsyncThunk(
 )
 
 // get my enrolled courses
-export const fetchMyCourses = createAsyncThunk(
+export const  fetchMyCourses = createAsyncThunk(
   "courses/fetchMyCourses",
   async (_, { rejectWithValue, getState }) => {
     try {
@@ -68,7 +68,7 @@ const coursesSlice = createSlice({
       })
       .addCase(fetchCourses.fulfilled, (state, action) => {
         state.loading = false
-        state.courses = action.payload.results || []
+        state.courses = action.payload.data || []
       })
       .addCase(fetchCourses.rejected, (state, action) => {
         state.loading = false
@@ -82,7 +82,7 @@ const coursesSlice = createSlice({
       })
       .addCase(fetchMyCourses.fulfilled, (state, action) => {
         state.loading = false
-        state.mycourseslist = action.payload.results || []
+        state.mycourseslist = action.payload.data || []
       })
       .addCase(fetchMyCourses.rejected, (state, action) => {
         state.loading = false

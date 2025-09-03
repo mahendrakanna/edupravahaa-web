@@ -7,7 +7,8 @@
         "forgotPassword": "/api/auth/forgot-password/",
         "getProfile": "/api/auth/profile/",
         "logout": "/api/auth/logout/",
-        "refreshToken": "/api/auth/refresh-token/"
+        "refreshToken": "/api/auth/refresh-token/",
+        "updatePassword": "/api/auth/change-password/"
     },
     "student": {
         "trialStatus": "/api/auth/trial-status/"

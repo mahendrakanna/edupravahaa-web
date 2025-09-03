@@ -32,6 +32,7 @@ const TemplateTitle = '%s - Vuexy React Admin Template'
 // ** Default Route
 const DefaultRoute = '/courses'
 
+
 // ** Merge Routes
 const Routes = [
   ...AuthenticationRoutes,

@@ -22,15 +22,16 @@ const VerticalMenuNavItems = props => {
   // ** Render Nav Menu Items
   const RenderNavItems = props.items.map((item, index) => {
     const TagName = Components[resolveNavItemComponent(item)]
+     const itemProps = { ...props, item, index, key: item.id || item.header, disabled: item.disabled }
     // if (item.children) {
     //   return canViewMenuGroup(item) && <TagName item={item} index={index} key={item.id} {...props} />
     // }
     // return canViewMenuItem(item) && <TagName key={item.id || item.header} item={item} {...props} />
 
      if (item.children) {
-      return  <TagName item={item} index={index} key={item.id} {...props} />
+      return <TagName {...itemProps} />
     }
-    return <TagName key={item.id || item.header} item={item} {...props} />
+    return <TagName {...itemProps} />
   })
   
 

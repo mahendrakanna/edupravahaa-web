@@ -11,7 +11,7 @@ const MyCourses = () => {
   useEffect(() => {
     dispatch(fetchMyCourses())
   }, [dispatch])
-  console.log("My Courses:", mycourseslist)
+  // console.log("My Courses:", mycourseslist)
   return (
     <Container fluid className="bg-white py-2 rounded shadow-sm">
       <h2 className="mb-2 text-center">My Courses </h2>

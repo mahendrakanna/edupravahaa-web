@@ -59,23 +59,16 @@ const EcommerceDashboard = () => {
           <RevenueReport primary={colors.primary.main} warning={colors.warning.main} />
         </Col>
       </Row>
-      <Row className='match-height'>
+      {/* <Row className='match-height'>
         <Col lg='8' xs='12'>
           <CompanyTable />
         </Col>
         <Col lg='4' md='6' xs='12'>
           <CardMeetup />
         </Col>
-        <Col lg='4' md='6' xs='12'>
-          <CardBrowserStates colors={colors} trackBgColor={trackBgColor} />
-        </Col>
-        <Col lg='4' md='6' xs='12'>
-          <GoalOverview success={colors.success.main} />
-        </Col>
-        <Col lg='4' md='6' xs='12'>
-          <CardTransactions />
-        </Col>
-      </Row>
+       
+        
+      </Row> */}
     </div>
   )
 }

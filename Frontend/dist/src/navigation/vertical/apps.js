@@ -1,5 +1,5 @@
 // ** Icons Import
-import { Mail, MessageSquare, CheckSquare, Calendar, FileText, Circle, ShoppingCart, User, Shield } from 'react-feather'
+import { Mail, MessageSquare, CheckSquare, Calendar, FileText, Circle, ShoppingCart, User, Shield, Home } from 'react-feather'
 
 export default [
   // {
@@ -12,23 +12,33 @@ export default [
   //   navLink: '/apps/chat'
   // },
   {
+    id:'dashboard',
+    title: 'Dashboard',
+    icon: <Home size={20} />,
+    navLink: '/dashboard',
+    roles:['teacher']
+  },
+  {
     id: 'mycourses',
     title: 'My Courses',
     icon: <CheckSquare size={20} />,
     navLink: '/mycourses',
+    roles: ['student']
     
   },
    {
     id:'courses',
     title: 'Courses',
     icon: <FileText size={20} />,
-    navLink: '/courses'
+    navLink: '/courses',
+    roles: ['student', 'admin']
   },
   {
     id: 'calendar',
     title: 'Calendar',
     icon: <Calendar size={20} />,
-    navLink: '/calendar'
+    navLink: '/calendar',
+    roles: ['student', 'teacher']
   },
 
   //   {

@@ -28,6 +28,7 @@
     const allRoutes = getRoutes(layout)
     const getHomeRoute = () => {
       const user = getUserData()
+      console.log('User kava:', user?.data)
       if (user) {
         return getHomeRouteForLoggedInUser(user.role)
       } else {

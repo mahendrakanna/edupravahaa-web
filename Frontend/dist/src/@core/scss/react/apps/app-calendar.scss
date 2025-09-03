@@ -50,3 +50,15 @@ html[dir='rtl'] {
     }
   }
 }
+.fc-event-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fc-daygrid-event {
+  font-size: 12px;
+  background: #f5f5ff;
+  border-radius: 6px;
+  padding: 2px 4px;
+}
