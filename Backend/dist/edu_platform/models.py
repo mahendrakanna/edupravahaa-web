@@ -162,6 +162,7 @@ class StudentProfile(models.Model):
         """Returns student's full name or email."""
         return f"Student: {self.user.get_full_name() or self.user.email}"
 
+
 class OTP(models.Model):
     """Manages one-time passwords for email or phone verification."""
     OTP_TYPE_CHOICES = (
@@ -172,6 +173,7 @@ class OTP(models.Model):
     PURPOSE_CHOICES = (
         ('registration', 'Registration'),
         ('password_reset', 'Password Reset'),
+        ('profile_update', 'Profile Update'),
     )
     
     identifier = models.CharField(max_length=255)  # email or phone number

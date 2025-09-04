@@ -14,9 +14,9 @@ from edu_platform.models import User, OTP, CourseSubscription, ClassSchedule
 from edu_platform.utility.email_services import send_otp_email
 from edu_platform.utility.sms_services import get_sms_service, ConsoleSMSService
 from edu_platform.serializers.auth_serializers import (
-    UserSerializer, RegisterSerializer, LoginSerializer,
+    UserSerializer, RegisterSerializer, LoginSerializer, 
     TeacherCreateSerializer, ChangePasswordSerializer,
-    SendOTPSerializer, VerifyOTPSerializer,
+    SendOTPSerializer, VerifyOTPSerializer, ProfileUpdateSerializer,
     ForgotPasswordSerializer, AdminCreateSerializer, AssignedCourseSerializer
 )
 import logging
@@ -132,7 +132,7 @@ class SendOTPView(generics.GenericAPIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
         if identifier_type == 'email':
-            # Use Twilio SendGrid for email
+            # Use SMPT for email
             email_sent = send_otp_email(identifier, otp.otp_code, purpose)
             
             # Handle email sending failure in production
@@ -149,7 +149,7 @@ class SendOTPView(generics.GenericAPIView):
             return Response(response_data, status=status.HTTP_200_OK)
             
         else:  # phone
-            # Send SMS using configured service
+            # Send SMS using Twilio service
             sms_sent = False
             using_console = False
             
@@ -254,6 +254,11 @@ class VerifyOTPView(generics.GenericAPIView):
         try:
             otp.is_verified = True
             otp.save()
+            if purpose == 'profile_update' and identifier_type == 'phone':
+                user = User.objects.filter(phone_number=identifier).first()
+                if user:
+                    user.phone_verified = True
+                    user.save()
         except Exception as e:
             logger.error(f"OTP verification error: {str(e)}")
             return Response({
@@ -511,8 +516,13 @@ class LogoutView(generics.GenericAPIView):
 
 class ProfileView(generics.RetrieveUpdateAPIView):
     """Manages retrieval and updates of user profile."""
-    serializer_class = UserSerializer
     permission_classes = [IsAuthenticated]
+    
+    def get_serializer_class(self):
+        """Returns the appropriate serializer based on the request method."""
+        if self.request.method == 'GET':
+            return UserSerializer
+        return ProfileUpdateSerializer
     
     @swagger_auto_schema(
         responses={
@@ -522,7 +532,8 @@ class ProfileView(generics.RetrieveUpdateAPIView):
                     type=openapi.TYPE_OBJECT,
                     properties={
                         'message': openapi.Schema(type=openapi.TYPE_STRING),
-                        'data': openapi.Schema(type=openapi.TYPE_OBJECT)
+                        'data': openapi.Schema(type=openapi.TYPE_OBJECT),
+                        'user_type': openapi.Schema(type=openapi.TYPE_STRING, description="Type of user (student or teacher)")
                     }
                 )
             ),
@@ -551,14 +562,23 @@ class ProfileView(generics.RetrieveUpdateAPIView):
     def get(self, request, *args, **kwargs):
         """Retrieves authenticated user's profile."""
         serializer = self.get_serializer(self.get_object())
+        user_type = 'student' if self.get_object().is_student else 'teacher' if self.get_object().is_teacher else 'unknown'
         return Response({
             'message': 'Profile retrieved successfully.',
-            'data': serializer.data
+            'data': serializer.data,
+            'user_type': user_type
         }, status=status.HTTP_200_OK)
     
-    def put(self, request, *args, **kwargs):
-        """Updates authenticated user's profile."""
-        serializer = self.get_serializer(self.get_object(), data=request.data, partial=True)
+    def patch(self, request, *args, **kwargs):
+        """Updates authenticated user's profile (partial update)."""
+        user = self.get_object()
+        if not (user.is_student or user.is_teacher):
+            return Response({
+                'error': 'Only students and teachers can update their profiles.',
+                'status': status.HTTP_400_BAD_REQUEST
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer = self.get_serializer(user, data=request.data, partial=True)
         if not serializer.is_valid():
             return Response({
                 'error': get_serializer_error_message(serializer.errors),
