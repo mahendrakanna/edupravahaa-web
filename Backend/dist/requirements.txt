@@ -18,3 +18,5 @@ requests==2.31.0
 twilio==9.7.0
 phonenumbers==8.13.52
 python-dotenv==1.0.1
+daphne==4.0.0
+whitenoise

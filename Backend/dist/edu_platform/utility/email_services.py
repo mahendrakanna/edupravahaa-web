@@ -20,7 +20,7 @@ def send_otp_email(email, otp_code, purpose='registration'):
     html_message = f"""
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <div style="background-color: #4CAF50; color: white; padding: 20px; text-align: center;">
-            <h1>EduStream</h1>
+            <h1>EduPravahaa</h1>
         </div>
         <div style="padding: 20px; background-color: #f9f9f9;">
             <h2>Verification Code</h2>

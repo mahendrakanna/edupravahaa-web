@@ -169,12 +169,25 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         """Ensures only allowed fields are included in the request."""
+        request = self.context.get('request')  # Fixed: Define request here
+        user = request.user
         allowed_fields = {'username', 'phone_number', 'password', 'identifier', 'otp_code', 'purpose'}
-        if self.context.get('request').user.is_student:
-            allowed_fields.add('profile')
         
-        request_data = self.context.get('request').data.keys()
-        invalid_fields = set(request_data) - allowed_fields
+        if user.is_student:
+            # Use set union for clarity
+            allowed_fields |= {'profile', 'profile_picture'}
+        
+        # Fixed: Use defined request
+        request_data_keys = list(request.data.keys())
+        logger.debug(f"Request data keys: {request_data_keys}, Allowed fields: {allowed_fields}")
+        
+        invalid_fields = set(request_data_keys) - allowed_fields
+        
+        # Special handling: Allow nested profile keys (e.g., 'profile[profile_picture]') for students
+        if user.is_student:
+            nested_profile_keys = [k for k in request_data_keys if k.startswith('profile[') and k.endswith(']')]
+            logger.debug(f"Nested profile keys: {nested_profile_keys}")
+            invalid_fields -= set(nested_profile_keys)  # Ignore (allow) nested keys for students
         
         if invalid_fields:
             raise serializers.ValidationError({
@@ -182,8 +195,9 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
             })
         
         # Ensure students provide identifier, otp_code, and purpose for phone number updates
-        if self.context.get('request').user.is_student and 'phone_number' in self.context.get('request').data:
-            if not all(key in self.context.get('request').data for key in ['identifier', 'otp_code', 'purpose']):
+        # Fixed: Use defined request
+        if user.is_student and 'phone_number' in request.data:
+            if not all(key in request.data for key in ['identifier', 'otp_code', 'purpose']):
                 raise serializers.ValidationError({
                     'error': 'Students must provide identifier, otp_code, and purpose for phone number updates.'
                 })
@@ -203,12 +217,14 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
             return None
         except Exception as e:
             logger.error(f"Error serializing profile for user {obj.id}: {str(e)}")
-            raise serializers.ValidationError({
-                'error': f'Failed to serialize profile: {str(e)}'
-            })
+            # Don't raise ValidationError here (avoids 500 in response); return safe value
+            return {'error': 'Profile data unavailable'}
 
     def update(self, instance, validated_data):
         """Handles partial update of user and profile data."""
+        request = self.context['request']
+        logger.debug(f"Request FILES: {dict(request.FILES)}")  # Debug files
+        
         # Update user fields (username, password, and phone_number for teachers)
         for attr, value in validated_data.items():
             if attr == 'password':
@@ -220,32 +236,70 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
                 instance.phone_verified = True
         instance.save()
 
-        # Update student profile picture if provided
-        if instance.is_student and 'profile' in self.context.get('request').data:
-            profile_data = self.context['request'].data.get('profile')
-            try:
-                student_profile = StudentProfile.objects.get(user=instance)
-                profile_serializer = StudentProfileSerializer(student_profile, 
-                                                           data=profile_data, 
-                                                           partial=True, 
-                                                           context=self.context)
-                if profile_serializer.is_valid():
-                    profile_serializer.save()
-                else:
+        # Enhanced: Update student profile (handle flat 'profile_picture' and nested 'profile[profile_picture]')
+        if instance.is_student:
+            profile_data = {}
+            profile_files = {}
+            
+            # Non-file data from 'profile' (if nested JSON-like, rare in multipart)
+            if 'profile' in request.data:
+                profile_data = request.data['profile']
+                logger.debug(f"Profile data (non-file): {profile_data}")
+            
+            # Extract files (flat or nested)
+            for key, file_obj in request.FILES.items():
+                if key == 'profile_picture':
+                    profile_files['profile_picture'] = file_obj
+                elif key.startswith('profile[') and k.endswith(']'):
+                    # e.g., 'profile[profile_picture]' -> 'profile_picture'
+                    field_name = key.split('[')[1].split(']')[0]
+                    profile_files[field_name] = file_obj
+                logger.debug(f"Extracted file: {key} -> {field_name if 'field_name' in locals() else key}")
+            
+            # If any profile data or files, update
+            if profile_data or profile_files:
+                try:
+                    student_profile = StudentProfile.objects.get(user=instance)
+                    
+                    # Handle non-file data via serializer
+                    if profile_data:
+                        profile_serializer = StudentProfileSerializer(
+                            student_profile, 
+                            data=profile_data, 
+                            partial=True, 
+                            context=self.context
+                        )
+                        if profile_serializer.is_valid(raise_exception=True):
+                            profile_serializer.save()
+                    
+                    # Directly set files on instance (handles ImageField save)
+                    for field, file_obj in profile_files.items():
+                        setattr(student_profile, field, file_obj)
+                        # Optional: Basic image validation (requires Pillow)
+                        # from PIL import Image
+                        # try:
+                        #     Image.open(file_obj).verify()
+                        # except:
+                        #     raise serializers.ValidationError({'error': f'Invalid image for {field}'})
+                        student_profile.save(update_fields=[field])
+                    
+                    logger.debug("Student profile updated successfully")
+                except StudentProfile.DoesNotExist:
                     raise serializers.ValidationError({
-                        'error': 'Invalid input data.'
+                        'error': 'Student profile not found.'
                     })
-            except StudentProfile.DoesNotExist:
-                raise serializers.ValidationError({
-                    'error': 'Student profile not found.'
-                })
+                except Exception as e:
+                    logger.error(f"Profile update error for user {instance.id}: {str(e)}")
+                    raise serializers.ValidationError({
+                        'error': f'Failed to update profile: {str(e)}'
+                    })
 
-        # Update student phone number if provided with OTP
-        if instance.is_student and 'identifier' in self.context.get('request').data:
+        # Update student phone number if provided with OTP (unchanged, but consistent)
+        if instance.is_student and 'identifier' in request.data:
             phone_data = {
-                'identifier': self.context['request'].data.get('identifier'),
-                'otp_code': self.context['request'].data.get('otp_code'),
-                'purpose': self.context['request'].data.get('purpose', 'profile_update')
+                'identifier': request.data.get('identifier'),
+                'otp_code': request.data.get('otp_code'),
+                'purpose': request.data.get('purpose', 'profile_update')
             }
             try:
                 identifier = phone_data['identifier']

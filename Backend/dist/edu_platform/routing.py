@@ -1,10 +1,8 @@
-"""Configures WebSocket routing for the classes app."""
+"""Configures WebSocket routing for the edu_platform app."""
+
 from django.urls import re_path
-from edu_platform.consumers import webrtc_consumers
+from edu_platform.consumers.classroom import ClassRoomConsumer
 
 websocket_urlpatterns = [
-    # WebSocket endpoint for WebRTC signaling
-
-    # Connects WebRTC signaling consumer for a specific room ID.
-    re_path(r'ws/signal/(?P<room_id>\w+)/$', webrtc_consumers.WebRTCSignalingConsumer.as_asgi()),
+    re_path(r'ws/class/(?P<class_id>\d+)/$', ClassRoomConsumer.as_asgi()),
 ]

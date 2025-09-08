@@ -1,7 +1,3 @@
-"""
-Django settings for edustream project.
-"""
-
 from pathlib import Path
 import os
 from datetime import timedelta
@@ -24,13 +20,10 @@ DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 
 ALLOWED_HOSTS = ['*']
 
-
-
-
 # Application definition
 
 INSTALLED_APPS = [
-    # 'daphne',
+    'daphne',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -45,18 +38,12 @@ INSTALLED_APPS = [
     'corsheaders',
     'channels',
     'drf_yasg',
-    
-    # Local apps
-    # 'accounts',
-    # 'courses',
-    # 'classes',
-    # 'payments',
-    # 'recordings',
-    'edu_platform'
+    'edu_platform',
 ]
 
 MIDDLEWARE = [
-    'django.middleware.security.SecurityMiddleware',
+    # 'django.middleware.security.SecurityMiddleware',
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -64,6 +51,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    "edustream.middleware.SecurityHeadersMiddleware", #Custom middleware for security
 ]
 
 ROOT_URLCONF = 'edustream.urls'
@@ -85,30 +73,18 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'edustream.wsgi.application'
-DOCKERIZED = os.environ.get("DOCKERIZED", "False") == "True"
+ASGI_APPLICATION = 'edustream.asgi.application'
 
-if DOCKERIZED:
-    ASGI_APPLICATION = "edustream.asgi.application"
-    CHANNEL_LAYERS = {
-        "default": {
-            "BACKEND": "channels_redis.core.RedisChannelLayer",
-            "CONFIG": {
-                "hosts": [(os.environ.get("REDIS_HOST", "localhost"), 6379)],
-            },
-        }
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {
+            "hosts": [(os.environ.get("REDIS_HOST", "localhost"), 6379)],
+        },
     }
-else:
-    # Local dev: point to WSGI app so Daphne still sees something
-    ASGI_APPLICATION = "edustream.wsgi.application"
-    CHANNEL_LAYERS = {}
-
+}
 
 # Database
-# https://docs.djangoproject.com/en/4.2/ref/settings/#databases
-
-
-import socket
-
 def get_postgres_host():
     # When inside Docker, use host.docker.internal
     if os.environ.get("DOCKERIZED", "False") == "True":
@@ -164,6 +140,7 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'static')
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
@@ -264,3 +241,31 @@ TRIAL_SETTINGS = {
 
 # email and phone number otp expiry time 
 OTP_EXPIRY_MINUTES = int(os.environ.get('OTP_EXPIRY_MINUTES', 5))
+
+# logging
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'level': 'DEBUG',  # Set to DEBUG for detailed logs
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'DEBUG',
+    },
+    'loggers': {
+        'edu_platform.middleware': {  # Specific logger for middleware
+            'handlers': ['console'],
+            'level': 'DEBUG',
+            'propagate': True,
+        },
+        'edu_platform.consumers': {  # For consumer logs
+            'handlers': ['console'],
+            'level': 'DEBUG',
+            'propagate': True,
+        },
+    },
+}
