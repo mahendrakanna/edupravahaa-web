@@ -62,3 +62,7 @@ html[dir='rtl'] {
   border-radius: 6px;
   padding: 2px 4px;
 }
+.calendar-event-completed {
+  opacity: 0.5;
+  text-decoration: line-through;
+}

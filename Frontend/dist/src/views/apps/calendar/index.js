@@ -80,18 +80,22 @@ const CalendarComponent = () => {
     const course = courseObj.course
     const dates = getScheduleDates(course.schedule)
 
-    return dates.map(d => {
-      const [startTime, endTime] = d.time.split(' to ')
-      return {
-        title: `${course.name} – ${startTime}`,
-        start: `${d.date}T${convertTo24Hour(startTime)}`,
-        end: `${d.date}T${convertTo24Hour(endTime)}`,
-        extendedProps: { 
-          courseId: course.id,
-          courseName: course.name,
-          scheduleType: d.type
-        }
+   return dates.map(d => {
+    const [startTime, endTime] = d.time.split(' to ')
+    const startDateTime = `${d.date}T${convertTo24Hour(startTime)}`
+    const endDateTime = `${d.date}T${convertTo24Hour(endTime)}`
+    const isCompleted = new Date(endDateTime) < new Date()
+    return {
+      title: `${course.name} – ${startTime}`,
+      start: startDateTime,
+      end: endDateTime,
+      extendedProps: { 
+        courseId: course.id,
+        courseName: course.name,
+        scheduleType: d.type,
+        completed: isCompleted // <-- add this
       }
+    }
     })
   }) || []
 

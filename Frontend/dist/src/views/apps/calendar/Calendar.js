@@ -14,6 +14,7 @@ import { Card, CardBody } from 'reactstrap'
 import tippy from 'tippy.js'
 import 'tippy.js/dist/tippy.css'
 import { useNavigate } from "react-router-dom";
+import '@styles/react/apps/app-calendar.scss'
 
 const Calendar = props => {
   const calendarRef = useRef(null)
@@ -55,21 +56,61 @@ const Calendar = props => {
     eventClassNames({ event }) {
       const courseId = event.extendedProps.courseId
       const colorName = courseColors[courseId] || 'primary'
-      return [`bg-light-${colorName}`, 'fc-event-custom']
+      const isCompleted = event.extendedProps.completed
+      return [
+        `bg-light-${colorName}`,
+        'fc-event-custom',
+        isCompleted ? 'calendar-event-completed' : ''
+      ]
     },
 
     eventClick({ event }) {
+      const isCompleted = event.extendedProps.completed
+      if (isCompleted) {
+        return
+      }
       const courseId = event.extendedProps.courseId
       console.log('Event clicked:', event)
-      navigate(`/live-class/${courseId}`)
+      navigate(`/live-class`)
     },
 
     eventDidMount(info) {
+    const isCompleted = info.event.extendedProps.completed
       tippy(info.el, {
         content: info.event.title,
         placement: 'top',
         arrow: true
       })
+       if (isCompleted) {
+    // Create the completed label
+    const completedDiv = document.createElement('div')
+    completedDiv.style.display = 'flex'
+    completedDiv.style.alignItems = 'center'
+    completedDiv.style.gap = '4px'
+    completedDiv.style.fontSize = '0.85em'
+    completedDiv.style.marginTop = '2px'
+    completedDiv.style.color = 'green'
+    completedDiv.innerHTML = `<span style="font-size:1.1em;">&#10003;</span> <span>Completed</span>`
+    completedDiv.style.position = 'absolute'
+    completedDiv.style.top = '100%'
+    completedDiv.style.left = '0'
+    completedDiv.style.background = '#fff'
+    completedDiv.style.padding = '2px 8px'
+    completedDiv.style.borderRadius = '4px'
+    completedDiv.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)'
+    completedDiv.style.zIndex = '10'
+    completedDiv.style.display = 'none'
+
+    info.el.style.position = 'relative'
+    info.el.appendChild(completedDiv)
+
+    info.el.addEventListener('mouseenter', () => {
+      completedDiv.style.display = 'flex'
+    })
+    info.el.addEventListener('mouseleave', () => {
+      completedDiv.style.display = 'none'
+    })
+  }
     },
 
     customButtons: {

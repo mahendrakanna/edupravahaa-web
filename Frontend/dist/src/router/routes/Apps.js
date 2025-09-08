@@ -3,6 +3,7 @@ import { lazy } from 'react'
 import { Navigate } from 'react-router-dom'
 import Courses from '../../views/apps/courses'
 import MyCourses from '../../views/apps/mycourses'
+import LiveClass from '../../views/apps/liveClass'
 
 
 const Calendar = lazy(() => import('../../views/apps/calendar'))
@@ -28,6 +29,10 @@ const AppRoutes = [
     element: <MyCourses />,
     path: '/mycourses'
   },
+  {
+    element: <LiveClass />,
+    path: '/live-class'
+  }
 ]
 
 export default AppRoutes
