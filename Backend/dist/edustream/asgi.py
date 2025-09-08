@@ -10,19 +10,22 @@ https://docs.djangoproject.com/en/4.2/howto/deployment/asgi/
 import os
 import logging
 import django
+from django.core.asgi import get_asgi_application
 from channels.routing import ProtocolTypeRouter, URLRouter
 from channels.security.websocket import AllowedHostsOriginValidator
-from django.core.asgi import get_asgi_application
-from edu_platform.routing import websocket_urlpatterns
+from channels.auth import AuthMiddlewareStack
 
 logger = logging.getLogger(__name__)
 
+# Set Django settings module BEFORE importing anything else
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'edustream.settings')
-# Ensure Django apps/settings are loaded
-django.setup()  
 
-# Import AFTER Django setup
-from edu_platform.jwt_middleware import JwtAuthMiddlewareStack  
+# Initialize Django settings
+django.setup()
+
+# Now import app-specific modules (they can access settings)
+from edu_platform.routing import websocket_urlpatterns
+from edu_platform.jwt_middleware import JwtAuthMiddlewareStack  # Custom JWT stack
 
 django_asgi_app = get_asgi_application()
 
