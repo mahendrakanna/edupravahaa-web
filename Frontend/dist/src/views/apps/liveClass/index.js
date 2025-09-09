@@ -185,14 +185,22 @@ const LiveClassPage = () => {
             );
           }
           break;
-        case "screen-share":
-          // Teacher changed sharing state — update UI. The teacher will renegotiate and send new tracks.
-          if (data.userId === teacherId && data.userId !== user.id) {
-            setTeacherScreenSharing(data.isSharing);
-            // if teacher stopped sharing, student main video should fall back to the teacher camera track
-            // That's handled naturally by the renegotiation sequence initiated by the teacher.
-          }
-          break;
+       case "screen-share":
+  if (data.userId === teacherId && data.userId !== user.id) {
+    setTeacherScreenSharing(data.isSharing);
+
+    if (!data.isSharing && mainVideoRef.current) {
+      // Teacher stopped sharing → revert to camera
+      const teacherCam = remoteStreams[teacherId];
+      if (teacherCam) {
+        mainVideoRef.current.srcObject = teacherCam;
+        mainVideoRef.current.muted = true;
+        mainVideoRef.current.play().catch(() => {});
+      }
+    }
+  }
+  break;
+
         default:
           break;
       }
@@ -215,22 +223,30 @@ const LiveClassPage = () => {
       }
     };
 
-    pc.ontrack = (event) => {
-      const [stream] = event.streams;
-      setRemoteStreams(prev => {
-        const updated = { ...prev, [otherId]: stream };
-        // If this track belongs to teacher and mainVideo exists, set it (mute screen-share to help autoplay)
-        if (parseInt(otherId) === teacherId && mainVideoRef.current) {
-          mainVideoRef.current.srcObject = stream;
-          // If teacher is screen-sharing, mute main video to prevent autoplay blocking (screen-share audio is false in our flow)
-          if (teacherScreenSharing || (stream && stream.getAudioTracks && stream.getAudioTracks().length === 0)) {
-            try { mainVideoRef.current.muted = true; } catch (e) {}
-          }
-          mainVideoRef.current.play().catch(() => {});
-        }
-        return updated;
-      });
-    };
+pc.ontrack = (event) => {
+  const [stream] = event.streams;
+
+  setRemoteStreams(prev => {
+    const updated = { ...prev, [otherId]: stream };
+
+    if (parseInt(otherId) === teacherId && mainVideoRef.current) {
+      // Decide which video to show: screen or camera
+      if (teacherScreenSharing) {
+        // Teacher is sharing screen → show screen stream
+        mainVideoRef.current.srcObject = stream;
+        try { mainVideoRef.current.muted = true; } catch (e) {}
+      } else {
+        // Teacher camera
+        mainVideoRef.current.srcObject = stream;
+        try { mainVideoRef.current.muted = false; } catch (e) {}
+      }
+      mainVideoRef.current.play().catch(() => {});
+    }
+
+    return updated;
+  });
+};
+
 
     // Add local tracks (if available)
     if (localStream) {
