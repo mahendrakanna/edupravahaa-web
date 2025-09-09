@@ -756,7 +756,7 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
                     batches=batches,
                     schedule=schedule
                 )
-            send_teacher_credentials(user.email, password)
+            # send_teacher_credentials(user.email, password)
             
             logger.info(f"Teacher created successfully: {user.id}")
             return user
