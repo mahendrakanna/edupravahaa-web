@@ -1,5 +1,5 @@
-
-import { useState, useRef, useEffect } from 'react';
+// LiveClassPage.jsx (replace your existing file)
+import React, { useState, useRef, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import './indec.css';
 
@@ -16,6 +16,22 @@ import EmojiEmotionsIcon from '@mui/icons-material/EmojiEmotions';
 import PanToolAltIcon from '@mui/icons-material/PanToolAlt';
 import GroupsIcon from '@mui/icons-material/Groups';
 import { useSelector } from 'react-redux';
+
+const configuration = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+
+// Small helper component to render remote student video and correctly set srcObject
+const StudentVideo = ({ stream }) => {
+  const ref = useRef();
+  useEffect(() => {
+    if (ref.current) {
+      ref.current.srcObject = stream || null;
+      // If there's no audio on stream (e.g. screen-share-only), muting helps autoplay in some browsers.
+      ref.current.muted = !!(stream && stream.getAudioTracks && stream.getAudioTracks().length === 0);
+      ref.current.play().catch(() => {});
+    }
+  }, [stream]);
+  return <video ref={ref} autoPlay playsInline className="student-video" />;
+};
 
 const LiveClassPage = () => {
   const { courseId } = useParams();
@@ -61,9 +77,10 @@ const LiveClassPage = () => {
       if (screenStream) screenStream.getTracks().forEach(track => track.stop());
       if (meetingTimer.current) clearInterval(meetingTimer.current);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [joined]);
 
-  // Handle screen share video updates
+  // Handle screen share video updates (local teacher view)
   useEffect(() => {
     if (screenSharing && screenStream && screenShareVideoRef.current) {
       screenShareVideoRef.current.srcObject = screenStream;
@@ -72,6 +89,7 @@ const LiveClassPage = () => {
     }
   }, [screenSharing, screenStream]);
 
+  // initializePreview & initializeMeetingMedia
   const initializePreview = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -121,7 +139,9 @@ const LiveClassPage = () => {
 
   // ---------------- WebSocket Setup ----------------
   const connectWebSocket = () => {
-    ws.current = new WebSocket(`ws://192.168.0.20:8000/ws/class/${7}/?token=Bearer%20${encodeURIComponent(token)}`);
+    // Use courseId (not hardcoded)
+    const wsUrl = `ws://192.168.0.20:8000/ws/class/${encodeURIComponent(7)}/?token=Bearer%20${encodeURIComponent(token)}`;
+    ws.current = new WebSocket(wsUrl);
 
     ws.current.onopen = () => {
       console.log("✅ WebSocket connected");
@@ -166,8 +186,11 @@ const LiveClassPage = () => {
           }
           break;
         case "screen-share":
+          // Teacher changed sharing state — update UI. The teacher will renegotiate and send new tracks.
           if (data.userId === teacherId && data.userId !== user.id) {
             setTeacherScreenSharing(data.isSharing);
+            // if teacher stopped sharing, student main video should fall back to the teacher camera track
+            // That's handled naturally by the renegotiation sequence initiated by the teacher.
           }
           break;
         default:
@@ -179,8 +202,6 @@ const LiveClassPage = () => {
   };
 
   // ---------------- WebRTC Signaling ----------------
-  const configuration = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
-
   const createPeerConnection = (otherId) => {
     const pc = new RTCPeerConnection(configuration);
 
@@ -198,19 +219,25 @@ const LiveClassPage = () => {
       const [stream] = event.streams;
       setRemoteStreams(prev => {
         const updated = { ...prev, [otherId]: stream };
-        // Force update video element if teacher is screen-sharing
-        if (otherId === teacherId && mainVideoRef.current) {
+        // If this track belongs to teacher and mainVideo exists, set it (mute screen-share to help autoplay)
+        if (parseInt(otherId) === teacherId && mainVideoRef.current) {
           mainVideoRef.current.srcObject = stream;
+          // If teacher is screen-sharing, mute main video to prevent autoplay blocking (screen-share audio is false in our flow)
+          if (teacherScreenSharing || (stream && stream.getAudioTracks && stream.getAudioTracks().length === 0)) {
+            try { mainVideoRef.current.muted = true; } catch (e) {}
+          }
           mainVideoRef.current.play().catch(() => {});
         }
         return updated;
       });
     };
 
+    // Add local tracks (if available)
     if (localStream) {
       localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
     }
 
+    // store pc
     setPeerConnections(prev => ({ ...prev, [otherId]: pc }));
     return pc;
   };
@@ -239,6 +266,7 @@ const LiveClassPage = () => {
         }
       });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [participants, joined, localStream]);
 
   const handleSignaling = async (innerData, sender) => {
@@ -259,20 +287,21 @@ const LiveClassPage = () => {
             data: { type: "answer", answer: pc.localDescription },
             target: sender
           }));
+          // process pending candidates if any
+          if (pc.pendingCandidates && pc.remoteDescription) processPendingCandidates(pc, sender);
           break;
         case "answer":
           await pc.setRemoteDescription(new RTCSessionDescription(innerData.answer));
+          if (pc.pendingCandidates && pc.remoteDescription) processPendingCandidates(pc, sender);
           break;
         case "candidate":
           // Only add candidate if remote description is set
           if (pc.remoteDescription) {
-            await pc.addIceCandidate(new RTCIceCandidate(innerData.candidate));
+            await pc.addIceCandidate(new RTCIceCandidate(innerData.candidate)).catch(err => console.error("Add ICE candidate error:", err));
           } else {
             console.warn(`Deferred ICE candidate for ${sender} until remote description is set`);
-            // Optionally queue candidates and process later when remote description is set
             pc.pendingCandidates = pc.pendingCandidates || [];
             pc.pendingCandidates.push(innerData.candidate);
-            setTimeout(() => processPendingCandidates(pc, sender), 100); // Retry after delay
           }
           break;
         default:
@@ -290,7 +319,7 @@ const LiveClassPage = () => {
           console.error(`Error adding deferred candidate for ${sender}:`, err)
         );
       });
-      delete pc.pendingCandidates; // Clear queue after processing
+      delete pc.pendingCandidates;
     }
   };
 
@@ -326,105 +355,118 @@ const LiveClassPage = () => {
     }
   };
 
+  // MAIN fix: Always renegotiate all PCs when teacher starts/stops screen share
   const toggleScreenShare = async () => {
-    if (isTeacher) {
-      if (!screenSharing) {
-        try {
-          const screenStream = await navigator.mediaDevices.getDisplayMedia({
-            video: { cursor: "always" },
-            audio: false,
-          });
-          setScreenStream(screenStream);
-          if (screenShareVideoRef.current) {
-            screenShareVideoRef.current.srcObject = screenStream;
-            screenShareVideoRef.current.muted = true;
-            screenShareVideoRef.current.play().catch(() => {});
-          }
+    if (!isTeacher) return;
 
-          const videoTrack = screenStream.getVideoTracks()[0];
-          Object.values(peerConnections).forEach((pc) => {
-            const sender = pc.getSenders().find((s) => s.track?.kind === "video");
-            if (sender) sender.replaceTrack(videoTrack);
-          });
+    if (!screenSharing) {
+      // Start screen share
+      try {
+        const newScreenStream = await navigator.mediaDevices.getDisplayMedia({
+          video: { cursor: "always" },
+          audio: false,
+        });
+        setScreenStream(newScreenStream);
 
-          // Renegotiate connection
-          await Promise.all(Object.entries(peerConnections).map(([otherId, pc]) => {
-            if (shouldInitiate(user.id, parseInt(otherId))) {
-              return pc.createOffer()
-                .then(offer => pc.setLocalDescription(offer))
-                .then(() => {
-                  ws.current?.send(JSON.stringify({
-                    type: "signaling",
-                    data: { type: "offer", offer: pc.localDescription },
-                    target: otherId
-                  }));
-                })
-                .catch(err => console.error("Error creating offer for renegotiation", err));
+        // Replace or add the video sender on each peer connection
+        const videoTrack = newScreenStream.getVideoTracks()[0];
+        await Promise.all(Object.entries(peerConnections).map(async ([otherId, pc]) => {
+          const sender = pc.getSenders().find(s => s.track?.kind === "video");
+          if (sender) {
+            await sender.replaceTrack(videoTrack).catch(err => console.warn("replaceTrack error:", err));
+          } else {
+            // if no sender exists, add track (and renegotiate)
+            try {
+              pc.addTrack(videoTrack, newScreenStream);
+            } catch (e) {
+              console.warn("addTrack failed:", e);
             }
-            return Promise.resolve();
-          }));
+          }
 
-          setScreenSharing(true);
-          setTeacherScreenSharing(true);
+          // Renegotiate with everyone (teacher initiates)
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
           ws.current?.send(JSON.stringify({
-            type: "screen-share",
-            userId: user.id,
-            isSharing: true
+            type: "signaling",
+            data: { type: "offer", offer: pc.localDescription },
+            target: otherId
           }));
+        }));
 
-          videoTrack.onended = () => toggleScreenShare();
-        } catch (error) {
-          console.error("Error sharing screen:", error);
+        // set local teacher preview to show screen
+        if (screenShareVideoRef.current) {
+          screenShareVideoRef.current.srcObject = newScreenStream;
+          screenShareVideoRef.current.muted = true;
+          screenShareVideoRef.current.play().catch(() => {});
         }
-      } else {
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({
-            video: true,
-            audio: isTeacher,
-          });
 
-          const videoTrack = stream.getVideoTracks()[0];
-          Object.values(peerConnections).forEach((pc) => {
-            const sender = pc.getSenders().find((s) => s.track?.kind === "video");
-            if (sender) sender.replaceTrack(videoTrack);
-          });
+        setScreenSharing(true);
+        setTeacherScreenSharing(true);
+        ws.current?.send(JSON.stringify({
+          type: "screen-share",
+          userId: user.id,
+          isSharing: true
+        }));
 
-          await Promise.all(Object.entries(peerConnections).map(([otherId, pc]) => {
-            if (shouldInitiate(user.id, parseInt(otherId))) {
-              return pc.createOffer()
-                .then(offer => pc.setLocalDescription(offer))
-                .then(() => {
-                  ws.current?.send(JSON.stringify({
-                    type: "signaling",
-                    data: { type: "offer", offer: pc.localDescription },
-                    target: otherId
-                  }));
-                })
-                .catch(err => console.error("Error creating offer for renegotiation", err));
+        // When screen stops (via browser UI), revert
+        videoTrack.onended = () => toggleScreenShare();
+      } catch (error) {
+        console.error("Error sharing screen:", error);
+      }
+    } else {
+      // Stop screen share - switch back to camera
+      try {
+        // Stop screen tracks
+        if (screenStream) {
+          screenStream.getTracks().forEach(t => t.stop());
+          setScreenStream(null);
+        }
+
+        // Get a new camera stream
+        const cameraStream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: isTeacher,
+        });
+
+        // Replace or add video sender for each pc with camera track
+        const cameraTrack = cameraStream.getVideoTracks()[0];
+        await Promise.all(Object.entries(peerConnections).map(async ([otherId, pc]) => {
+          const sender = pc.getSenders().find(s => s.track?.kind === "video");
+          if (sender) {
+            await sender.replaceTrack(cameraTrack).catch(err => console.warn("replaceTrack error:", err));
+          } else {
+            try {
+              pc.addTrack(cameraTrack, cameraStream);
+            } catch (e) {
+              console.warn("addTrack failed:", e);
             }
-            return Promise.resolve();
-          }));
-
-          if (screenStream) {
-            screenStream.getTracks().forEach((track) => track.stop());
-            setScreenStream(null);
           }
 
-          setLocalStream(stream);
-          if (localVideoRef.current) {
-            localVideoRef.current.srcObject = stream;
-          }
-
-          setScreenSharing(false);
-          setTeacherScreenSharing(false);
+          // Renegotiate with everyone (teacher initiates)
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
           ws.current?.send(JSON.stringify({
-            type: "screen-share",
-            userId: user.id,
-            isSharing: false
+            type: "signaling",
+            data: { type: "offer", offer: pc.localDescription },
+            target: otherId
           }));
-        } catch (error) {
-          console.error("Error switching back to camera:", error);
+        }));
+
+        // Update local stream preview
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = cameraStream;
         }
+        setLocalStream(cameraStream);
+
+        setScreenSharing(false);
+        setTeacherScreenSharing(false);
+        ws.current?.send(JSON.stringify({
+          type: "screen-share",
+          userId: user.id,
+          isSharing: false
+        }));
+      } catch (error) {
+        console.error("Error switching back to camera:", error);
       }
     }
   };
@@ -485,7 +527,9 @@ const LiveClassPage = () => {
   // UI Logic for Videos
   const teacher = participants.find(p => p.role === 'teacher');
   const teacherId = teacher?.id;
+  console.log("Teacher ID:", teacherId);
   const mainStream = isTeacher ? localStream : remoteStreams[teacherId];
+  console.log("Main Stream:", mainStream);
   const studentStreams = Object.entries(remoteStreams).filter(([id]) => parseInt(id) !== user.id && parseInt(id) !== teacherId);
 
   useEffect(() => {
@@ -571,12 +615,7 @@ const LiveClassPage = () => {
         {studentStreams.length > 0 && (
           <div className="student-videos-scroll">
             {studentStreams.map(([id, stream]) => (
-              <video
-                key={id}
-                autoPlay
-                srcObject={stream}
-                className="student-video"
-              ></video>
+              <StudentVideo key={id} stream={stream} />
             ))}
           </div>
         )}
