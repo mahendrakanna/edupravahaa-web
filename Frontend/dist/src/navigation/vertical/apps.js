@@ -23,7 +23,7 @@ export default [
     title: 'My Courses',
     icon: <CheckSquare size={20} />,
     navLink: '/mycourses',
-    roles: ['student']
+    roles: ['student','teacher']
     
   },
    {

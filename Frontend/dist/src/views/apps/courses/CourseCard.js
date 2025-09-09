@@ -26,12 +26,12 @@ import { getTrialPeriod } from "../../../redux/authentication"
 
 const CourseCard = ({ course }) => {
   const [modal, setModal] = useState(false)
-  const [selectedBatch, setSelectedBatch] = useState(null) // Track batch selection
+  const [selectedBatch, setSelectedBatch] = useState(null) 
   const toggle = () => {
     setModal(!modal)
-    setSelectedBatch(null) // reset when modal closed
+    setSelectedBatch(null) 
   }
-
+  console.log("course", course)
   const token = useSelector((state) => state.auth.token)
   const razorpay_key = import.meta.env.VITE_RAZORPAY_KEY
   const BaseUrl = import.meta.env.VITE_API_BASE_URL
@@ -55,7 +55,7 @@ const CourseCard = ({ course }) => {
       )
 
       const orderData = orderResponse.data.data
-      console.log("orderData",orderData)
+      console.log("orderData", orderData)
       const options = {
         key: razorpay_key,
         amount: orderData.amount,
@@ -103,16 +103,23 @@ const CourseCard = ({ course }) => {
     }
   }
 
-const groupedBatches = course.schedule?.reduce((acc, batch) => {
+  // ✅ Group batches if available
+  const groupedBatches = course.schedule?.reduce((acc, batch) => {
   if (!acc[batch.type]) {
-    acc[batch.type] = { ...batch, sessions: [{ day: batch.days[0], time: batch.time }] }
+    acc[batch.type] = { 
+      ...batch, 
+      sessions: batch.days.map((day) => ({ day, time: batch.time })) 
+    }
   } else {
-    acc[batch.type].sessions.push({ day: batch.days[0], time: batch.time })
+    batch.days.forEach((day) => {
+      acc[batch.type].sessions.push({ day, time: batch.time })
+    })
   }
   return acc
 }, {})
 
-const batchList = Object.values(groupedBatches)
+  const batchList = groupedBatches ? Object.values(groupedBatches) : []
+
   return (
     <>
       <Card className="shadow-sm h-100 course-card">
@@ -131,11 +138,14 @@ const batchList = Object.values(groupedBatches)
             {course.name}
           </CardTitle>
           <CardText className="text-muted">{course.description}</CardText>
-          <div className="d-flex justify-content-end mt-2">
+          <div className="d-flex flex-column align-items-end mt-2">
             <span>
               <FaChartLine className="text-primary me-1" />
               ₹{course.base_price}
             </span>
+            {batchList.length === 0 && (
+              <span className="text-muted fw-bold mt-1">Coming Soon ...</span>
+            )}
           </div>
         </CardBody>
         <CardFooter className="text-end">
@@ -165,20 +175,24 @@ const batchList = Object.values(groupedBatches)
             ))}
           </ListGroup>
 
-          {/* ✅ Batch Selection */}
+          {/* ✅ Batch Selection or Coming Soon */}
           <h6 className="fw-bold mt-1">Available Batches:</h6>
-          <div className="d-flex gap-1 flex-wrap">
-            {batchList.map((batch, idx) => (
-              <Button
-                key={idx}
-                outline
-                color={selectedBatch?.type === batch.type ? "primary" : "secondary"}
-                onClick={() => setSelectedBatch(batch)}
-              >
-                {batch.type.charAt(0).toUpperCase() + batch.type.slice(1)}
-              </Button>
-            ))}
-          </div>
+          {batchList.length > 0 ? (
+            <div className="d-flex gap-1 flex-wrap">
+              {batchList.map((batch, idx) => (
+                <Button
+                  key={idx}
+                  outline
+                  color={selectedBatch?.type === batch.type ? "primary" : "secondary"}
+                  onClick={() => setSelectedBatch(batch)}
+                >
+                  {batch.type.charAt(0).toUpperCase() + batch.type.slice(1)}
+                </Button>
+              ))}
+            </div>
+          ) : (
+            <p className="text-muted fw-bold">Coming Soon</p>
+          )}
 
           {/* ✅ Show selected batch details */}
           {selectedBatch && (
@@ -192,8 +206,8 @@ const batchList = Object.values(groupedBatches)
                   </p>
                 ))}
               </div>
-                <div className="d-flex justify-content-between align-items-center mt-2">
-                <Badge color="info"  className="px-1 py-1">
+              <div className="d-flex justify-content-between align-items-center mt-2">
+                <Badge color="info" className="px-1 py-1">
                   📅 Starts:{" "}
                   {new Date(selectedBatch.startDate).toLocaleDateString("en-US", {
                     day: "2-digit",
@@ -201,7 +215,7 @@ const batchList = Object.values(groupedBatches)
                     year: "numeric",
                   })}
                 </Badge>
-                <Badge color="warning"  className="px-1 py-1">
+                <Badge color="warning" className="px-1 py-1">
                   🏁 Ends:{" "}
                   {new Date(selectedBatch.endDate).toLocaleDateString("en-US", {
                     day: "2-digit",
@@ -210,7 +224,6 @@ const batchList = Object.values(groupedBatches)
                   })}
                 </Badge>
               </div>
-
             </div>
           )}
 
@@ -232,7 +245,7 @@ const batchList = Object.values(groupedBatches)
           <Button 
             color="primary" 
             onClick={handleEnroll} 
-            disabled={!selectedBatch} 
+            disabled={batchList.length === 0 || !selectedBatch} 
           >
             Enroll Now
           </Button>
