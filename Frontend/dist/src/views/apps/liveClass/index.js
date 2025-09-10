@@ -140,7 +140,7 @@ const LiveClassPage = () => {
   // ---------------- WebSocket Setup ----------------
   const connectWebSocket = () => {
     // Use courseId (not hardcoded)
-    const wsUrl = `ws://192.168.0.20:8000/ws/class/${encodeURIComponent(7)}/?token=Bearer%20${encodeURIComponent(token)}`;
+    const wsUrl = `ws://192.168.0.19:8000/ws/class/${encodeURIComponent(7)}/?token=Bearer%20${encodeURIComponent(token)}`;
     ws.current = new WebSocket(wsUrl);
 
     ws.current.onopen = () => {
@@ -227,25 +227,29 @@ pc.ontrack = (event) => {
   const [stream] = event.streams;
 
   setRemoteStreams(prev => {
-    const updated = { ...prev, [otherId]: stream };
+    const updated = { ...prev };
 
-    if (parseInt(otherId) === teacherId && mainVideoRef.current) {
-      // Decide which video to show: screen or camera
-      if (teacherScreenSharing) {
-        // Teacher is sharing screen → show screen stream
-        mainVideoRef.current.srcObject = stream;
-        try { mainVideoRef.current.muted = true; } catch (e) {}
-      } else {
-        // Teacher camera
-        mainVideoRef.current.srcObject = stream;
-        try { mainVideoRef.current.muted = false; } catch (e) {}
+    // If it's teacher, keep both camera + screen
+    if (parseInt(otherId) === teacherId) {
+      if (!updated[teacherId]) updated[teacherId] = {};
+
+      if (event.track.kind === "video") {
+        // Screen shares often have a track label with "screen"
+        if (event.track.label.toLowerCase().includes("screen")) {
+          updated[teacherId].screen = stream;
+        } else {
+          updated[teacherId].camera = stream;
+        }
       }
-      mainVideoRef.current.play().catch(() => {});
+    } else {
+      // For students, just store normally
+      updated[otherId] = stream;
     }
 
     return updated;
   });
 };
+
 
 
     // Add local tracks (if available)
@@ -540,20 +544,55 @@ pc.ontrack = (event) => {
     setTimeout(() => { setShowEmoji(false); setEmoji(''); }, 2000);
   };
 
+  // UI Logic for Videos  // ...existing code...
+  
   // UI Logic for Videos
   const teacher = participants.find(p => p.role === 'teacher');
   const teacherId = teacher?.id;
-  console.log("Teacher ID:", teacherId);
-  const mainStream = isTeacher ? localStream : remoteStreams[teacherId];
-  console.log("Main Stream:", mainStream);
-  const studentStreams = Object.entries(remoteStreams).filter(([id]) => parseInt(id) !== user.id && parseInt(id) !== teacherId);
-
+  
+  let mainStream;
+  if (isTeacher) {
+    mainStream = localStream;
+  } else if (teacherId && remoteStreams[teacherId]) {
+    if (teacherScreenSharing && remoteStreams[teacherId].screen) {
+      mainStream = remoteStreams[teacherId].screen;
+    } else if (remoteStreams[teacherId].camera) {
+      mainStream = remoteStreams[teacherId].camera;
+    } else {
+      mainStream = null;
+    }
+  } else {
+    mainStream = null;
+  }
+  
+  const studentStreams = Object.entries(remoteStreams).filter(
+    ([id]) => parseInt(id) !== user.id && parseInt(id) !== teacherId
+  );
+  
+  // Set main video srcObject when mainStream changes
   useEffect(() => {
     if (mainVideoRef.current && mainStream) {
       mainVideoRef.current.srcObject = mainStream;
       mainVideoRef.current.play().catch(() => {});
     }
   }, [mainStream]);
+  
+
+  console.log("Teacher ID:", teacherId);
+  console.log("Main Stream:", mainStream);
+
+  useEffect(() => {
+  if (mainVideoRef.current && teacherId) {
+    const teacherStreams = remoteStreams[teacherId];
+    if (teacherScreenSharing && teacherStreams?.screen) {
+      mainVideoRef.current.srcObject = teacherStreams.screen;
+    } else if (teacherStreams?.camera) {
+      mainVideoRef.current.srcObject = teacherStreams.camera;
+    }
+    mainVideoRef.current.play().catch(() => {});
+  }
+}, [remoteStreams, teacherScreenSharing, teacherId]);
+
 
   // ---------------- UI ----------------
   if (!joined) {
