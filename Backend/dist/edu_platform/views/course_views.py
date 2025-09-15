@@ -9,6 +9,8 @@ from rest_framework import serializers
 from edu_platform.models import Course, CourseSubscription, ClassSchedule
 from edu_platform.serializers.course_serializers import CourseSerializer, MyCoursesSerializer
 from edu_platform.permissions.auth_permissions import IsTeacher, IsStudent, IsTeacherOrAdmin, IsAdmin
+from django.utils import timezone
+from datetime import date
 import logging
 
 logger = logging.getLogger(__name__)
@@ -44,12 +46,14 @@ class CourseListView(generics.ListAPIView):
     
     def get_queryset(self):
         """Filters courses based on user role, purchase status, and query parameters."""
+        today = date.today()
+        # Start with active courses and apply upcoming batch filter for students
         queryset = Course.objects.filter(is_active=True)
         user = self.request.user
         if user.is_authenticated and user.role == 'student':
-            if not user.is_trial_expired and not user.has_purchased_courses:
-                pass
-            elif user.has_purchased_courses:
+            # Only include courses with upcoming batches
+            queryset = queryset.filter(class_schedules__batch_start_date__gte=today).distinct()
+            if user.has_purchased_courses:
                 purchased_course_ids = CourseSubscription.objects.filter(
                     student=user, payment_status='completed'
                 ).values_list('course__id', flat=True)
