@@ -1,20 +1,22 @@
-import json
-import logging
-import os
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.core.exceptions import PermissionDenied
 import redis.asyncio as redis
-import asyncio  # For timeout
+from django.utils import timezone
+import asyncio
+import json
+import logging
+import os
 
 logger = logging.getLogger(__name__)
 
 class ClassRoomConsumer(AsyncWebsocketConsumer):
     async def connect(self):
-        # Lazy imports to avoid AppRegistryNotReady
-        from edu_platform.models import ClassSchedule, CourseSubscription
+        # Lazy imports
+        from edu_platform.models import ClassSession, CourseSubscription
         from django.contrib.auth import get_user_model
-        User = get_user_model()  # ✅ Lazy import
+        User = get_user_model()
+
         user = self.scope['user']
 
         self.class_id = self.scope['url_route']['kwargs']['class_id']
@@ -38,8 +40,18 @@ class ClassRoomConsumer(AsyncWebsocketConsumer):
             await self.close(code=4003)
             return
 
-        # Connect to Redis and add user (with timeout to prevent hang)
-        logger.debug("Starting Redis connection")
+        current_time = timezone.now()
+        try:
+            session = await database_sync_to_async(ClassSession.objects.get)(class_id=self.class_id, is_active=True)
+            if not (session.start_time <= current_time <= session.end_time):
+                logger.warning(f"Class not active: class_id={self.class_id}, time={current_time}")
+                await self.close(code=4004, reason="Class is not currently active.")
+                return
+        except ClassSession.DoesNotExist:
+            logger.error(f"ClassSession not found: class_id={self.class_id}")
+            await self.close(code=4004)
+            return
+
         self.redis_client = redis.Redis(
             host=os.environ.get('REDIS_HOST', 'localhost'),
             port=6379,
@@ -51,7 +63,7 @@ class ClassRoomConsumer(AsyncWebsocketConsumer):
             logger.debug("Redis sadd complete")
         except asyncio.TimeoutError:
             logger.error(f"Redis timeout for class_id={self.class_id}")
-            await self.close(code=4002)  # Custom code for Redis failure
+            await self.close(code=4002)
             return
         except Exception as e:
             logger.error(f"Redis error: {e}")
@@ -100,7 +112,7 @@ class ClassRoomConsumer(AsyncWebsocketConsumer):
                     'sender': 'system',
                 }
             )
-            logger.info(f"User {user.email} disconnected from class {self.class_id}, code={close_code}")
+        logger.info(f"User {user.email} disconnected from class {self.class_id}, code={close_code}")
 
     async def receive(self, text_data):
         try:
@@ -171,21 +183,19 @@ class ClassRoomConsumer(AsyncWebsocketConsumer):
 
     @database_sync_to_async
     def is_eligible(self, user):
-        # Lazy imports
-        from edu_platform.models import ClassSchedule, CourseSubscription
-
+        from edu_platform.models import ClassSession, CourseSubscription
         try:
-            class_schedule = ClassSchedule.objects.get(id=self.class_id)
+            session = ClassSession.objects.get(class_id=self.class_id, is_active=True)
             if user.is_teacher:
-                return ClassSchedule.objects.filter(id=self.class_id, teacher=user).exists()
+                return session.schedule.teacher == user
             elif user.is_student:
                 return CourseSubscription.objects.filter(
                     student=user,
-                    course=class_schedule.course,
+                    course=session.schedule.course,
                     payment_status='completed',
                     is_active=True
                 ).exists()
             return False
-        except ClassSchedule.DoesNotExist:
-            logger.error(f"ClassSchedule not found: id={self.class_id}")
+        except ClassSession.DoesNotExist:
+            logger.error(f"ClassSession not found: class_id={self.class_id}")
             return False

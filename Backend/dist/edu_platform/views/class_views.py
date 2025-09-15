@@ -7,8 +7,11 @@ from drf_yasg import openapi
 from django.utils import timezone
 from datetime import timedelta
 from edu_platform.permissions.auth_permissions import IsAdmin, IsTeacher
-from edu_platform.models import ClassSchedule
-from edu_platform.serializers.class_serializers import ClassScheduleSerializer
+from edu_platform.models import User, ClassSchedule, ClassSession
+from edu_platform.serializers.class_serializers import ClassScheduleSerializer, ClassSessionSerializer
+from botocore.exceptions import ClientError
+from django.db.models import Q
+import boto3
 import logging
 
 logger = logging.getLogger(__name__)
@@ -59,7 +62,7 @@ class ClassScheduleView(APIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @swagger_auto_schema(
-        operation_description="Create a class schedule (admin or teacher)",
+        operation_description="Create a class schedule with sessions (admin or teacher)",
         request_body=ClassScheduleSerializer,
         responses={
             201: openapi.Response(
@@ -67,7 +70,7 @@ class ClassScheduleView(APIView):
                 schema=ClassScheduleSerializer
             ),
             400: openapi.Response(
-                description="Invalid input",
+                description="Invalid input or conflict",
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
@@ -89,7 +92,7 @@ class ClassScheduleView(APIView):
         }
     )
     def post(self, request, *args, **kwargs):
-        """Creates a class schedule."""
+        """Creates a class schedule with sessions."""
         try:
             if not (request.user.is_admin or request.user.is_teacher):
                 return Response({
@@ -99,26 +102,24 @@ class ClassScheduleView(APIView):
             
             serializer = ClassScheduleSerializer(data=request.data, context={'request': request})
             if not serializer.is_valid():
-                error_message = list(serializer.errors.values())[0][0] if isinstance(list(serializer.errors.values())[0], list) else list(serializer.errors.values())[0]
-                logger.error(f"Class schedule creation validation error: {error_message}")
+                logger.error(f"Class schedule creation validation error: {serializer.errors}")
                 return Response({
-                    'error': error_message,
+                    'error': 'Validation failed.',
+                    'details': serializer.errors,
                     'status': status.HTTP_400_BAD_REQUEST
                 }, status=status.HTTP_400_BAD_REQUEST)
             
-            # Check if assignment exists
-            course_id = request.data.get('course_id')
-            if ClassSchedule.objects.filter(
-                    teacher=request.user if request.user.is_teacher else serializer.validated_data.get('teacher'),
-                    course_id=course_id
-                ).exists():
+            result = serializer.save()
+            if isinstance(result, dict):
                 return Response({
-                    'error': 'Schedule for this teacher-course pair already exists.',
-                    'status': status.HTTP_400_BAD_REQUEST
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            schedule = serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
+                    'message': 'Batch assignment created successfully.',
+                    'data': [ClassScheduleSerializer(s).data for s in result['schedules']]
+                }, status=status.HTTP_201_CREATED)
+            else:
+                return Response({
+                    'message': 'Schedule created successfully.',
+                    'data': ClassScheduleSerializer(result).data
+                }, status=status.HTTP_201_CREATED)
         except Exception as e:
             logger.error(f"Error creating class schedule: {str(e)}")
             return Response({
@@ -127,7 +128,7 @@ class ClassScheduleView(APIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @swagger_auto_schema(
-        operation_description="Update a class schedule by ID (teacher within 1 hour of login or admin)",
+        operation_description="Update a class schedule and sessions by ID (teacher within 1 hour or admin)",
         request_body=ClassScheduleSerializer,
         responses={
             200: openapi.Response(
@@ -167,7 +168,7 @@ class ClassScheduleView(APIView):
         }
     )
     def put(self, request, schedule_id=None, *args, **kwargs):
-        """Updates a specific class schedule."""
+        """Updates a specific class schedule and its sessions."""
         try:
             schedule = ClassSchedule.objects.get(id=schedule_id)
             if request.user.is_teacher:
@@ -208,5 +209,99 @@ class ClassScheduleView(APIView):
             logger.error(f"Error updating class schedule: {str(e)}")
             return Response({
                 'error': f'Failed to update schedule: {str(e)}',
+                'status': status.HTTP_500_INTERNAL_SERVER_ERROR
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class ClassSessionRecordingView(APIView):
+    """Handles updating the recording URL for a ClassSession."""
+    permission_classes = [IsAuthenticated, IsTeacher]
+
+    @swagger_auto_schema(
+        operation_description="Update recording URL for a class session (teacher only)",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'recording_url': openapi.Schema(type=openapi.TYPE_STRING, description='S3 URL of the recording')
+            },
+            required=['recording_url']
+        ),
+        responses={
+            200: openapi.Response(
+                description="Recording URL updated",
+                schema=ClassSessionSerializer
+            ),
+            400: openapi.Response(
+                description="Invalid input",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'error': openapi.Schema(type=openapi.TYPE_STRING),
+                        'status': openapi.Schema(type=openapi.TYPE_INTEGER)
+                    }
+                )
+            ),
+            403: openapi.Response(
+                description="Permission denied",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'error': openapi.Schema(type=openapi.TYPE_STRING),
+                        'status': openapi.Schema(type=openapi.TYPE_INTEGER)
+                    }
+                )
+            ),
+            404: openapi.Response(
+                description="Class session not found",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'error': openapi.Schema(type=openapi.TYPE_STRING),
+                        'status': openapi.Schema(type=openapi.TYPE_INTEGER)
+                    }
+                )
+            )
+        }
+    )
+    def patch(self, request, class_id=None):
+        """Updates the recording URL for a specific class session."""
+        try:
+            session = ClassSession.objects.get(class_id=class_id)
+            if session.schedule.teacher != request.user:
+                return Response({
+                    'error': 'You can only update recordings for your own classes.',
+                    'status': status.HTTP_403_FORBIDDEN
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            serializer = ClassSessionSerializer(session, data={'recording_url': request.data.get('recording_url')}, partial=True)
+            if not serializer.is_valid():
+                error_message = list(serializer.errors.values())[0][0] if isinstance(list(serializer.errors.values())[0], list) else list(serializer.errors.values())[0]
+                logger.error(f"Recording update validation error: {error_message}")
+                return Response({
+                    'error': error_message,
+                    'status': status.HTTP_400_BAD_REQUEST
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Validate S3 URL (basic check, adjust based on your S3 configuration)
+            s3_url = request.data.get('recording_url')
+            if not s3_url.startswith('https://') or 's3' not in s3_url:
+                return Response({
+                    'error': 'Invalid S3 URL format.',
+                    'status': status.HTTP_400_BAD_REQUEST
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            serializer.save()
+            return Response({
+                'message': 'Recording URL updated successfully.',
+                'data': serializer.data
+            }, status=status.HTTP_200_OK)
+        except ClassSession.DoesNotExist:
+            return Response({
+                'error': 'Class session not found.',
+                'status': status.HTTP_404_NOT_FOUND
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error updating recording URL: {str(e)}")
+            return Response({
+                'error': f'Failed to update recording URL: {str(e)}',
                 'status': status.HTTP_500_INTERNAL_SERVER_ERROR
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

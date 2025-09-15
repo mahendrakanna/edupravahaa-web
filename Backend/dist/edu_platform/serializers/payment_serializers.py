@@ -9,9 +9,7 @@ def validate_batch_for_course(value, course):
         raise serializers.ValidationError({
             'error': f"No schedules available for course '{course.name}'."
         })
-    available_batches = set()
-    for schedule in schedules:
-        available_batches.update(schedule.batches)
+    available_batches = set(schedule.batch for schedule in schedules)
     if value not in available_batches:
         raise serializers.ValidationError({
             'error': f"Batch '{value}' is not available for course '{course.name}'."

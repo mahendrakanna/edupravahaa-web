@@ -1,5 +1,7 @@
 from rest_framework import serializers
-from edu_platform.models import Course, CourseSubscription, ClassSchedule, CourseEnrollment
+from edu_platform.models import Course, CourseSubscription, ClassSchedule, CourseEnrollment, ClassSession
+from django.utils import timezone
+from datetime import datetime, timedelta
 import logging
 
 logger = logging.getLogger(__name__)
@@ -34,23 +36,17 @@ class CourseSerializer(serializers.ModelSerializer):
 
     def validate_duration_hours(self, value):
         if value is not None and value <= 0:
-            raise serializers.ValidationError({
-                'error': 'Duration must be a positive integer.'
-            })
+            raise serializers.ValidationError({'error': 'Duration must be a positive integer.'})
         return value
 
     def validate_base_price(self, value):
         if value is not None and value < 0:
-            raise serializers.ValidationError({
-                'error': 'Base price cannot be negative.'
-            })
+            raise serializers.ValidationError({'error': 'Base price cannot be negative.'})
         return value
 
     def validate_advantages(self, value):
         if value is not None and not isinstance(value, list):
-            raise serializers.ValidationError({
-                'error': 'Advantages must be a list.'
-            })
+            raise serializers.ValidationError({'error': 'Advantages must be a list.'})
         return value
 
     def validate_level(self, value):
@@ -61,30 +57,73 @@ class CourseSerializer(serializers.ModelSerializer):
         return value
 
     def get_batches(self, obj):
-        """Returns batches for the course, filtered by context if provided."""
+        """Returns batches for the course that have not started, filtered by context if provided."""
         batches = self.context.get('batches')
         if batches:
             return [batch for batch in batches if batch in ['weekdays', 'weekends']]
         
-        schedules = ClassSchedule.objects.filter(course=obj)
+        # Only include schedules that have not started (batch_start_date >= today)
+        schedules = ClassSchedule.objects.filter(
+            course=obj,
+            batch_start_date__gte=timezone.now().date()
+        )
         all_batches = set()
         for schedule in schedules:
-            all_batches.update(schedule.batches)
-        return list(all_batches)
+            batch_type = 'weekdays' if 'weekday' in schedule.batch.lower() else 'weekends'
+            all_batches.add(batch_type)
+        return sorted(list(all_batches))
 
     def get_schedule(self, obj):
-        """Returns schedule entries for the course, filtered by assigned/enrolled batches if provided."""
+        """Returns schedule entries for the course, grouped by batch and time slot, for batches that have not started."""
         batches = self.context.get('batches')
-        schedules = ClassSchedule.objects.filter(course=obj)
+        # Only include schedules that have not started (batch_start_date >= today)
+        schedules = ClassSchedule.objects.filter(
+            course=obj,
+            batch_start_date__gte=timezone.now().date()
+        )
         all_schedules = []
         
         for schedule in schedules:
-            for s in schedule.schedule:
-                if not batches or (batches and s.get('type') in batches):
-                    if s not in all_schedules:
-                        all_schedules.append(s)
+            batch_type = 'weekdays' if 'weekday' in schedule.batch.lower() else 'weekends'
+            if batches and batch_type not in batches:
+                continue
+            
+            sessions = ClassSession.objects.filter(schedule=schedule).order_by('start_time')
+            if not sessions.exists():
+                continue
+                
+            # Group sessions by time slot
+            schedule_entries = {}
+            for session in sessions:
+                time_key = (
+                    session.start_time.strftime('%I:%M %p'),
+                    session.end_time.strftime('%I:%M %p')
+                )
+                key = (time_key, batch_type)
+                
+                if key not in schedule_entries:
+                    schedule_entries[key] = {
+                        'days': [],
+                        'batchStartDate': schedule.batch_start_date.strftime('%Y-%m-%d'),
+                        'batchEndDate': schedule.batch_end_date.strftime('%Y-%m-%d'),
+                        'time': f"{time_key[0]} to {time_key[1]}",
+                        'type': batch_type
+                    }
+                day = session.start_time.strftime('%A')
+                if day not in schedule_entries[key]['days']:
+                    schedule_entries[key]['days'].append(day)
+            
+            # Sort days to match desired order (Monday to Sunday)
+            for entry in schedule_entries.values():
+                entry['days'] = sorted(
+                    entry['days'],
+                    key=lambda x: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].index(x)
+                )
+                if entry not in all_schedules:
+                    all_schedules.append(entry)
         
-        return all_schedules
+        return sorted(all_schedules, key=lambda x: (x['batchStartDate'], x['type'], x['time']))
+
 
 class MyCoursesSerializer(serializers.Serializer):
     """Serializes purchased courses for students or assigned courses for teachers."""
@@ -101,14 +140,18 @@ class MyCoursesSerializer(serializers.Serializer):
         batches = None
         
         if user and user.role == 'student':
+            # For students, get the enrolled batch from CourseEnrollment
             enrollment = CourseEnrollment.objects.filter(subscription=obj).first()
             batch = enrollment.batch if enrollment else None
+            batches = [batch] if batch else []
         elif user and user.role == 'teacher':
+            # For teachers, get all batches they are assigned to
             schedules = ClassSchedule.objects.filter(course=obj, teacher=user)
             batches = set()
             for schedule in schedules:
-                batches.update(schedule.batches)
-            batches = list(batches) if batches else None
+                batch_type = 'weekdays' if 'weekday' in schedule.batch.lower() else 'weekends'
+                batches.add(batch_type)
+            batches = sorted(list(batches)) if batches else None
         
         try:
             return CourseSerializer(
@@ -120,3 +163,19 @@ class MyCoursesSerializer(serializers.Serializer):
             raise serializers.ValidationError({
                 'error': f'Failed to serialize course: {str(e)}'
             })
+
+    def to_representation(self, instance):
+        """Customizes the response format to match the desired structure."""
+        representation = super().to_representation(instance)
+        user = self.context.get('request').user if self.context.get('request') else None
+        
+        if user and user.role == 'teacher':
+            # For teachers, set purchased_at and payment_status to null
+            representation['purchased_at'] = None
+            representation['payment_status'] = None
+        elif user and user.role == 'student':
+            # For students, ensure purchased_at and payment_status are from the subscription
+            representation['purchased_at'] = instance.purchased_at
+            representation['payment_status'] = instance.payment_status
+        
+        return representation

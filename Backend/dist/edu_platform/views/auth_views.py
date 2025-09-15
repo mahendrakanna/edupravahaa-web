@@ -10,7 +10,7 @@ from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from django.utils import timezone
 from edu_platform.permissions.auth_permissions import IsAdmin, IsTeacher, IsStudent
-from edu_platform.models import User, OTP, CourseSubscription, ClassSchedule
+from edu_platform.models import User, OTP, CourseSubscription, ClassSchedule, ClassSession
 from edu_platform.utility.email_services import send_otp_email
 from edu_platform.utility.sms_services import get_sms_service, ConsoleSMSService
 from edu_platform.serializers.auth_serializers import (
@@ -604,21 +604,52 @@ class ProfileView(generics.RetrieveUpdateAPIView):
 
 
 class TeacherRegisterView(generics.CreateAPIView):
-    """Registers a new teacher user by admin."""
-    queryset = User.objects.all()
+    """Allows admin to register a teacher with course assignments and schedules."""
     serializer_class = TeacherCreateSerializer
     permission_classes = [IsAuthenticated, IsAdmin]
-    
+
     @swagger_auto_schema(
-        operation_description="Register a new teacher account by admin",
+        operation_description="Register a new teacher with course assignments and schedules (Admin only)",
+        request_body=TeacherCreateSerializer,
         responses={
             201: openapi.Response(
-                description="Teacher registration successful",
+                description="Teacher registered successfully",
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
                         'message': openapi.Schema(type=openapi.TYPE_STRING),
-                        'data': openapi.Schema(type=openapi.TYPE_OBJECT)
+                        'data': openapi.Schema(
+                            type=openapi.TYPE_OBJECT,
+                            properties={
+                                'id': openapi.Schema(type=openapi.TYPE_INTEGER),
+                                'email': openapi.Schema(type=openapi.TYPE_STRING),
+                                'first_name': openapi.Schema(type=openapi.TYPE_STRING),
+                                'last_name': openapi.Schema(type=openapi.TYPE_STRING),
+                                'phone': openapi.Schema(type=openapi.TYPE_STRING),
+                                'role': openapi.Schema(type=openapi.TYPE_STRING),
+                                'schedules': openapi.Schema(
+                                    type=openapi.TYPE_ARRAY,
+                                    items=openapi.Items(
+                                        type=openapi.TYPE_OBJECT,
+                                        properties={
+                                            'course_id': openapi.Schema(type=openapi.TYPE_INTEGER),
+                                            'batch': openapi.Schema(type=openapi.TYPE_STRING),
+                                            'sessions': openapi.Schema(
+                                                type=openapi.TYPE_ARRAY,
+                                                items=openapi.Items(
+                                                    type=openapi.TYPE_OBJECT,
+                                                    properties={
+                                                        'class_id': openapi.Schema(type=openapi.TYPE_STRING, format='uuid'),
+                                                        'start_time': openapi.Schema(type=openapi.TYPE_STRING, format='date-time'),
+                                                        'end_time': openapi.Schema(type=openapi.TYPE_STRING, format='date-time')
+                                                    }
+                                                )
+                                            )
+                                        }
+                                    )
+                                )
+                            }
+                        )
                     }
                 )
             ),
@@ -628,71 +659,59 @@ class TeacherRegisterView(generics.CreateAPIView):
                     type=openapi.TYPE_OBJECT,
                     properties={
                         'error': openapi.Schema(type=openapi.TYPE_STRING),
-                        'status': openapi.Schema(type=openapi.TYPE_INTEGER, description="HTTP status code"),
-                        'errors': openapi.Schema(type=openapi.TYPE_OBJECT, description="Detailed field errors")
+                        'status': openapi.Schema(type=openapi.TYPE_INTEGER)
                     }
                 )
             ),
+            401: openapi.Response(description="Unauthorized"),
+            403: openapi.Response(description="Forbidden"),
             500: openapi.Response(
                 description="Server error",
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
                         'error': openapi.Schema(type=openapi.TYPE_STRING),
-                        'status': openapi.Schema(type=openapi.TYPE_INTEGER, description="HTTP status code")
+                        'status': openapi.Schema(type=openapi.TYPE_INTEGER)
                     }
                 )
             )
         }
     )
     def post(self, request, *args, **kwargs):
-        """Creates a teacher user and returns detailed profile data."""
-        logger.debug(f"Received teacher registration request: {request.data}")
-        serializer = self.get_serializer(data=request.data)
-        if not serializer.is_valid():
-            errors = serializer.errors
-            error_message = get_serializer_error_message(errors)
-            detailed_errors = {}
-            
-            # Extract specific field errors
-            for field, error in errors.items():
-                if isinstance(error, list):
-                    detailed_errors[field] = error[0]
-                elif isinstance(error, dict) and 'error' in error:
-                    detailed_errors[field] = error['error']
-                else:
-                    detailed_errors[field] = str(error)
-            
-            # Fallback to generic message if no specific field error
-            if not detailed_errors:
-                if 'non_field_errors' in errors:
-                    error_message = errors['non_field_errors'][0]
-                elif errors:
-                    error_message = list(errors.values())[0][0] if isinstance(list(errors.values())[0], list) else list(errors.values())[0]
-            
-            logger.error(f"Teacher registration validation error: {detailed_errors or error_message}")
-            return Response({
-                'error': error_message,
-                'status': status.HTTP_400_BAD_REQUEST,
-                'errors': detailed_errors
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
         try:
-            user = serializer.save()
-            logger.info(f"Teacher created successfully: {user.id}")
+            serializer = self.get_serializer(data=request.data)
+            if not serializer.is_valid():
+                error_message = list(serializer.errors.values())[0][0] if isinstance(list(serializer.errors.values())[0], list) else list(serializer.errors.values())[0]
+                logger.error(f"Teacher registration validation error: {error_message}")
+                return Response({
+                    'error': error_message,
+                    'status': status.HTTP_400_BAD_REQUEST
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+            teacher = serializer.save()
+            schedules = []
+            for schedule in ClassSchedule.objects.filter(teacher=teacher):
+                sessions = ClassSession.objects.filter(schedule=schedule).values('class_id', 'start_time', 'end_time')
+                schedules.append({
+                    'course_id': schedule.course.id,
+                    'batch': schedule.batch,
+                    'sessions': list(sessions)
+                })
+
             return Response({
-                'message': 'Teacher created successfully.',
-                'data': UserSerializer(user, context={'request': request}).data
+                'message': 'Teacher registered successfully.',
+                'data': {
+                    'id': teacher.id,
+                    'email': teacher.email,
+                    'first_name': teacher.first_name,
+                    'last_name': teacher.last_name,
+                    'phone_number': teacher.phone_number,
+                    'role': teacher.role,
+                    'schedules': schedules
+                }
             }, status=status.HTTP_201_CREATED)
-        except serializers.ValidationError as e:
-            logger.error(f"Teacher registration validation error: {str(e)}")
-            return Response({
-                'error': str(e),
-                'status': status.HTTP_400_BAD_REQUEST,
-                'errors': {}
-            }, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
-            logger.error(f"Teacher registration error: {str(e)}")
+            logger.error(f"Error registering teacher: {str(e)}")
             return Response({
                 'error': f'Failed to register teacher: {str(e)}',
                 'status': status.HTTP_500_INTERNAL_SERVER_ERROR
