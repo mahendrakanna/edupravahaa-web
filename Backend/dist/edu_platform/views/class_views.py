@@ -62,7 +62,7 @@ class ClassScheduleView(APIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @swagger_auto_schema(
-        operation_description="Create a class schedule with sessions (admin or teacher)",
+        operation_description="Create a class schedule with sessions (admin only for batch assignments, admin/teacher for single batch)",
         request_body=ClassScheduleSerializer,
         responses={
             201: openapi.Response(
@@ -75,6 +75,7 @@ class ClassScheduleView(APIView):
                     type=openapi.TYPE_OBJECT,
                     properties={
                         'error': openapi.Schema(type=openapi.TYPE_STRING),
+                        'details': openapi.Schema(type=openapi.TYPE_OBJECT),
                         'status': openapi.Schema(type=openapi.TYPE_INTEGER)
                     }
                 )
@@ -94,6 +95,14 @@ class ClassScheduleView(APIView):
     def post(self, request, *args, **kwargs):
         """Creates a class schedule with sessions."""
         try:
+            # Restrict batch assignments to admins only
+            if 'batch_assignment' in request.data and not request.user.is_admin:
+                return Response({
+                    'error': 'Only admins can create multiple batch assignments.',
+                    'status': status.HTTP_403_FORBIDDEN
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            # Restrict single batch creation to admins or the teacher themselves
             if not (request.user.is_admin or request.user.is_teacher):
                 return Response({
                     'error': 'You do not have permission to create schedules.',

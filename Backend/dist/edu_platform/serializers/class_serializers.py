@@ -106,14 +106,14 @@ class ClassScheduleAssignmentSerializer(serializers.Serializer):
             raise serializers.ValidationError({"error": f"Course with ID {value} not found or inactive."})
 
     def validate_batches(self, value):
-        """Ensures batches are valid and unique."""
+        """Ensures batches are valid and unique within this request."""
         valid_batches = ['weekdays', 'weekends']
         if not all(batch in valid_batches for batch in value):
             raise serializers.ValidationError({
                 'error': f"Batches must be one or more of: {', '.join(valid_batches)}."
             })
         if len(value) != len(set(value)):
-            raise serializers.ValidationError({"error": "Duplicate batches are not allowed."})
+            raise serializers.ValidationError({"error": "Duplicate batches are not allowed in the same request."})
         return value
 
     def validate(self, attrs):
@@ -129,9 +129,6 @@ class ClassScheduleAssignmentSerializer(serializers.Serializer):
             if 'weekdays_start_date' in attrs and 'weekdays_end_date' in attrs:
                 if attrs['weekdays_start_date'] > attrs['weekdays_end_date']:
                     errors['weekdays_end_date'] = "End date must be after start date."
-                delta = (attrs['weekdays_end_date'] - attrs['weekdays_start_date']).days
-                if delta > 7:
-                    errors['weekdays_end_date'] = "Date range exceeds one week. Confirm intent for weekly repetition."
             if 'weekdays_days' in attrs:
                 valid_days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
                 if not all(day in valid_days for day in attrs['weekdays_days']):
@@ -145,9 +142,6 @@ class ClassScheduleAssignmentSerializer(serializers.Serializer):
             if 'weekend_start_date' in attrs and 'weekend_end_date' in attrs:
                 if attrs['weekend_start_date'] > attrs['weekend_end_date']:
                     errors['weekend_end_date'] = "End date must be after start date."
-                delta = (attrs['weekend_end_date'] - attrs['weekend_start_date']).days
-                if delta > 7:
-                    errors['weekend_end_date'] = "Weekend date range exceeds one week. Confirm intent."
             has_sat = attrs.get('saturday_start') and attrs.get('saturday_end')
             has_sun = attrs.get('sunday_start') and attrs.get('sunday_end')
             if not (has_sat or has_sun):
@@ -177,10 +171,9 @@ class ClassScheduleAssignmentSerializer(serializers.Serializer):
                 })
 
             current_date = start_date
-            seen_days = set()
-            while current_date <= end_date and len(seen_days) < len(days):
+            while current_date <= end_date:
                 day_name = current_date.strftime('%A')
-                if day_name in days and day_name not in seen_days:
+                if day_name in days:
                     session_start = timezone.make_aware(datetime.combine(current_date, start_time))
                     session_end = timezone.make_aware(datetime.combine(current_date, end_time))
                     overlapping_sessions = ClassSession.objects.filter(
@@ -192,9 +185,8 @@ class ClassScheduleAssignmentSerializer(serializers.Serializer):
                     if overlapping_sessions.exists():
                         conflict_session = overlapping_sessions.first()
                         raise serializers.ValidationError({
-                            'error': f"Teacher already has a class on {day_name} from {start_time_str} to {end_time_str}. Please select a different time."
+                            'error': f"Teacher has a conflicting session on {current_date.strftime('%Y-%m-%d')} from {start_time_str} to {end_time_str} (existing: {conflict_session.start_time} to {conflict_session.end_time}). Timing must differ on the same date."
                         })
-                    seen_days.add(day_name)
                 current_date += timedelta(days=1)
 
 
@@ -271,9 +263,6 @@ class ClassScheduleSerializer(serializers.ModelSerializer):
             if 'weekdays_start_date' in attrs and 'weekdays_end_date' in attrs:
                 if attrs['weekdays_start_date'] > attrs['weekdays_end_date']:
                     errors['weekdays_end_date'] = "End date must be after start date."
-                delta = (attrs['weekdays_end_date'] - attrs['weekdays_start_date']).days
-                if delta > 7:
-                    errors['weekdays_end_date'] = "Date range exceeds one week. Confirm intent for weekly repetition."
             if 'weekdays_days' in attrs:
                 valid_days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
                 if not all(day in valid_days for day in attrs['weekdays_days']):
@@ -287,9 +276,6 @@ class ClassScheduleSerializer(serializers.ModelSerializer):
             if 'weekend_start_date' in attrs and 'weekend_end_date' in attrs:
                 if attrs['weekend_start_date'] > attrs['weekend_end_date']:
                     errors['weekend_end_date'] = "End date must be after start date."
-                delta = (attrs['weekend_end_date'] - attrs['weekend_start_date']).days
-                if delta > 7:
-                    errors['weekend_end_date'] = "Weekend date range exceeds one week. Confirm intent."
             has_sat = attrs.get('saturday_start') and attrs.get('saturday_end')
             has_sun = attrs.get('sunday_start') and attrs.get('sunday_end')
             if not (has_sat or has_sun):
@@ -306,8 +292,8 @@ class ClassScheduleSerializer(serializers.ModelSerializer):
         teacher_id = validated_data.pop('teacher_id', None)
         course_id = validated_data.pop('course_id')
         course = Course.objects.get(id=course_id)
-        batch = validated_data.pop('batch')
-    
+        batch = validated_data.pop('batch', None)
+
         if batch_assignment:
             # Multiple batch assignment
             teacher = User.objects.get(id=batch_assignment['teacher_id'], role='teacher')
@@ -355,38 +341,9 @@ class ClassScheduleSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(assignment_serializer.errors)
             assignment_serializer.validate_session_conflicts(teacher, course_id, schedules)
 
-            # Create schedules
+            # Create schedules and sessions
             created_schedules = []
             for schedule in schedules:
-                # Allow same batch as long as timings don’t conflict
-                existing = ClassSchedule.objects.filter(course=course, teacher=teacher, batch=schedule['batch']).first()
-                if existing:
-                    logger.info(f"Teacher {teacher.email} already has a '{schedule['batch']}' batch, checking conflicts only.")
-
-                # Check for time conflicts across all schedules for the teacher
-                current_date = schedule['start_date']
-                seen_days = set()
-                start_time = parse_time_string(schedule['start_time'])
-                end_time = parse_time_string(schedule['end_time'])
-                while current_date <= schedule['end_date'] and len(seen_days) < len(schedule['days']):
-                    day_name = current_date.strftime('%A')
-                    if day_name in schedule['days'] and day_name not in seen_days:
-                        session_start = timezone.make_aware(datetime.combine(current_date, start_time))
-                        session_end = timezone.make_aware(datetime.combine(current_date, end_time))
-                        overlapping_sessions = ClassSession.objects.filter(
-                            schedule__teacher=teacher,
-                            session_date=current_date,
-                            start_time__lt=session_end,
-                            end_time__gt=session_start
-                        )
-                        if overlapping_sessions.exists():
-                            conflict_session = overlapping_sessions.first()
-                            raise serializers.ValidationError({
-                                'error': f"Teacher already has a class on {day_name} from {schedule['start_time']} to {schedule['end_time']}. Please select a different time."
-                            })
-                        seen_days.add(day_name)
-                    current_date += timedelta(days=1)
-
                 class_schedule = ClassSchedule.objects.create(
                     course=course,
                     teacher=teacher,
@@ -396,12 +353,13 @@ class ClassScheduleSerializer(serializers.ModelSerializer):
                 )
                 created_schedules.append(class_schedule)
 
-                # Create sessions (first occurrence only)
+                # Create sessions for all matching days
                 current_date = schedule['start_date']
-                seen_days = set()
-                while current_date <= schedule['end_date'] and len(seen_days) < len(schedule['days']):
+                start_time = parse_time_string(schedule['start_time'])
+                end_time = parse_time_string(schedule['end_time'])
+                while current_date <= schedule['end_date']:
                     day_name = current_date.strftime('%A')
-                    if day_name in schedule['days'] and day_name not in seen_days:
+                    if day_name in schedule['days']:
                         session_start = timezone.make_aware(datetime.combine(current_date, start_time))
                         session_end = timezone.make_aware(datetime.combine(current_date, end_time))
                         ClassSession.objects.create(
@@ -411,7 +369,6 @@ class ClassScheduleSerializer(serializers.ModelSerializer):
                             start_time=session_start,
                             end_time=session_end
                         )
-                        seen_days.add(day_name)
                     current_date += timedelta(days=1)
 
             return {'schedules': created_schedules}
@@ -423,11 +380,6 @@ class ClassScheduleSerializer(serializers.ModelSerializer):
                 teacher = self.context['request'].user
             if not teacher.role == 'teacher':
                 raise serializers.ValidationError({'error': 'User must be a teacher.'})
-
-            # Allow same batch as long as timings don’t conflict
-            existing = ClassSchedule.objects.filter(course=course, teacher=teacher, batch=batch).first()
-            if existing:
-                logger.info(f"Teacher {teacher.email} already has a '{batch}' batch, checking conflicts only.")
 
             # Prepare schedule for validation
             schedules = []
@@ -477,31 +429,6 @@ class ClassScheduleSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(assignment_serializer.errors)
             assignment_serializer.validate_session_conflicts(teacher, course_id, schedules)
 
-            # Additional conflict check before creation
-            for schedule in schedules:
-                current_date = schedule['start_date']
-                seen_days = set()
-                start_time = parse_time_string(schedule['start_time'])
-                end_time = parse_time_string(schedule['end_time'])
-                while current_date <= schedule['end_date'] and len(seen_days) < len(schedule['days']):
-                    day_name = current_date.strftime('%A')
-                    if day_name in schedule['days'] and day_name not in seen_days:
-                        session_start = timezone.make_aware(datetime.combine(current_date, start_time))
-                        session_end = timezone.make_aware(datetime.combine(current_date, end_time))
-                        overlapping_sessions = ClassSession.objects.filter(
-                            schedule__teacher=teacher,
-                            session_date=current_date,
-                            start_time__lt=session_end,
-                            end_time__gt=session_start
-                        )
-                        if overlapping_sessions.exists():
-                            conflict_session = overlapping_sessions.first()
-                            raise serializers.ValidationError({
-                                'error': f"Teacher already has a class on {day_name} from {schedule['start_time']} to {schedule['end_time']}. Please select a different time."
-                            })
-                        seen_days.add(day_name)
-                    current_date += timedelta(days=1)
-
             # Create ClassSchedule
             class_schedule = ClassSchedule.objects.create(
                 course=course,
@@ -511,27 +438,23 @@ class ClassScheduleSerializer(serializers.ModelSerializer):
                 batch_end_date=validated_data.get('weekdays_end_date') or validated_data.get('weekend_end_date')
             )
 
-            # Create sessions (first occurrence only)
-            created_sessions = []
+            # Create sessions for all matching days
             for schedule in schedules:
                 current_date = schedule['start_date']
-                seen_days = set()
                 start_time = parse_time_string(schedule['start_time'])
                 end_time = parse_time_string(schedule['end_time'])
-                while current_date <= schedule['end_date'] and len(seen_days) < len(schedule['days']):
+                while current_date <= schedule['end_date']:
                     day_name = current_date.strftime('%A')
-                    if day_name in schedule['days'] and day_name not in seen_days:
+                    if day_name in schedule['days']:
                         session_start = timezone.make_aware(datetime.combine(current_date, start_time))
                         session_end = timezone.make_aware(datetime.combine(current_date, end_time))
-                        session = ClassSession.objects.create(
+                        ClassSession.objects.create(
                             class_id=uuid.uuid4(),
                             schedule=class_schedule,
                             session_date=current_date,
                             start_time=session_start,
                             end_time=session_end
                         )
-                        created_sessions.append(session)
-                        seen_days.add(day_name)
                     current_date += timedelta(days=1)
 
             return class_schedule

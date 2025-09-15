@@ -476,14 +476,16 @@ class TeacherCourseAssignmentSerializer(serializers.Serializer):
             raise serializers.ValidationError({"error": f"Course with ID {value} not found or inactive."})
 
     def validate_batches(self, value):
-        """Ensures batches are valid and unique."""
+        """Validates batch choices and ensures no duplicates within this assignment."""
         valid_batches = ['weekdays', 'weekends']
         if not all(batch in valid_batches for batch in value):
             raise serializers.ValidationError({
                 'error': f"Batches must be one or more of: {', '.join(valid_batches)}."
             })
         if len(value) != len(set(value)):
-            raise serializers.ValidationError({"error": "Duplicate batches are not allowed."})
+            raise serializers.ValidationError({"error": "Duplicate batches are not allowed in the same assignment."})
+        if len(value) > 2:
+            raise serializers.ValidationError({"error": "At most two batches (weekdays, weekends) can be assigned per course during creation."})
         return value
 
     def validate(self, attrs):
@@ -499,9 +501,6 @@ class TeacherCourseAssignmentSerializer(serializers.Serializer):
             if 'weekdays_start_date' in attrs and 'weekdays_end_date' in attrs:
                 if attrs['weekdays_start_date'] > attrs['weekdays_end_date']:
                     errors['weekdays_end_date'] = "End date must be after start date."
-                delta = (attrs['weekdays_end_date'] - attrs['weekdays_start_date']).days
-                if delta > 7:
-                    errors['weekdays_end_date'] = "Date range exceeds one week. Confirm intent for weekly repetition."
             if 'weekdays_days' in attrs:
                 valid_days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
                 if not all(day in valid_days for day in attrs['weekdays_days']):
@@ -515,9 +514,6 @@ class TeacherCourseAssignmentSerializer(serializers.Serializer):
             if 'weekend_start_date' in attrs and 'weekend_end_date' in attrs:
                 if attrs['weekend_start_date'] > attrs['weekend_end_date']:
                     errors['weekend_end_date'] = "End date must be after start date."
-                delta = (attrs['weekend_end_date'] - attrs['weekend_start_date']).days
-                if delta > 7:
-                    errors['weekend_end_date'] = "Weekend date range exceeds one week. Confirm intent."
             has_sat = attrs.get('saturday_start') and attrs.get('saturday_end')
             has_sun = attrs.get('sunday_start') and attrs.get('sunday_end')
             if not (has_sat or has_sun):
@@ -547,10 +543,9 @@ class TeacherCourseAssignmentSerializer(serializers.Serializer):
                 })
 
             current_date = start_date
-            seen_days = set()
-            while current_date <= end_date and len(seen_days) < len(days):
+            while current_date <= end_date:
                 day_name = current_date.strftime('%A')
-                if day_name in days and day_name not in seen_days:
+                if day_name in days:
                     session_start = timezone.make_aware(datetime.combine(current_date, start_time))
                     session_end = timezone.make_aware(datetime.combine(current_date, end_time))
                     overlapping_sessions = ClassSession.objects.filter(
@@ -563,7 +558,6 @@ class TeacherCourseAssignmentSerializer(serializers.Serializer):
                         raise serializers.ValidationError({
                             'error': f"Teacher has a conflicting session on {current_date.strftime('%Y-%m-%d')} from {start_time_str} to {end_time_str} (existing: {conflict_session.start_time} to {conflict_session.end_time}). Timing must differ on the same date."
                         })
-                    seen_days.add(day_name)
                 current_date += timedelta(days=1)
 
 class TeacherCreateSerializer(serializers.ModelSerializer):
@@ -653,7 +647,7 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
                 batches = assignment['batches']
                 schedules = []
 
-                # Prepare schedules for validation
+                # Prepare schedules for validation (same as before, but loop will handle recurrence)
                 if 'weekdays' in batches:
                     start_date = assignment['weekdays_start_date']
                     end_date = assignment['weekdays_end_date']
@@ -718,10 +712,9 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
                     end_time = datetime.strptime(assignment['weekdays_end'], '%I:%M %p').time()
 
                     current_date = start_date
-                    seen_days = set()
-                    while current_date <= end_date and len(seen_days) < len(days):
+                    while current_date <= end_date:
                         day_name = current_date.strftime('%A')
-                        if day_name in days and day_name not in seen_days:
+                        if day_name in days:
                             session_start = timezone.make_aware(datetime.combine(current_date, start_time))
                             session_end = timezone.make_aware(datetime.combine(current_date, end_time))
                             ClassSession.objects.create(
@@ -731,7 +724,6 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
                                 start_time=session_start,
                                 end_time=session_end
                             )
-                            seen_days.add(day_name)
                         current_date += timedelta(days=1)
 
                 if 'weekends' in batches:
@@ -750,8 +742,7 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
                         sat_start_time = datetime.strptime(assignment['saturday_start'], '%I:%M %p').time()
                         sat_end_time = datetime.strptime(assignment['saturday_end'], '%I:%M %p').time()
                         current_date = start_date
-                        seen_saturday = False
-                        while current_date <= end_date and not seen_saturday:
+                        while current_date <= end_date:
                             if current_date.strftime('%A') == 'Saturday':
                                 session_start = timezone.make_aware(datetime.combine(current_date, sat_start_time))
                                 session_end = timezone.make_aware(datetime.combine(current_date, sat_end_time))
@@ -762,7 +753,6 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
                                     start_time=session_start,
                                     end_time=session_end
                                 )
-                                seen_saturday = True
                             current_date += timedelta(days=1)
 
                     # Sunday sessions
@@ -770,8 +760,7 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
                         sun_start_time = datetime.strptime(assignment['sunday_start'], '%I:%M %p').time()
                         sun_end_time = datetime.strptime(assignment['sunday_end'], '%I:%M %p').time()
                         current_date = start_date
-                        seen_sunday = False
-                        while current_date <= end_date and not seen_sunday:
+                        while current_date <= end_date:
                             if current_date.strftime('%A') == 'Sunday':
                                 session_start = timezone.make_aware(datetime.combine(current_date, sun_start_time))
                                 session_end = timezone.make_aware(datetime.combine(current_date, sun_end_time))
@@ -782,7 +771,6 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
                                     start_time=session_start,
                                     end_time=session_end
                                 )
-                                seen_sunday = True
                             current_date += timedelta(days=1)
 
             return user
