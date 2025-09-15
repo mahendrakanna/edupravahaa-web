@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.utils import timezone
 from datetime import datetime, timedelta
-from edu_platform.models import User, ClassSchedule, Course, ClassSession
+from edu_platform.models import User, ClassSchedule, Course, ClassSession, CourseEnrollment
 import logging
 import uuid
 
@@ -21,6 +21,57 @@ class ClassSessionSerializer(serializers.ModelSerializer):
         model = ClassSession
         fields = ['class_id', 'start_time', 'end_time', 'recording_url', 'is_active']
         read_only_fields = ['class_id', 'recording_url', 'is_active']
+
+class ClassSessionDetailSerializer(serializers.ModelSerializer):
+    """Serializer for class session details."""
+    session_date = serializers.DateField(read_only=True)
+    start_time = serializers.DateTimeField(read_only=True, format="%Y-%m-%dT%H:%M:%SZ")
+    end_time = serializers.DateTimeField(read_only=True, format="%Y-%m-%dT%H:%M:%SZ")
+
+    class Meta:
+        model = ClassSession
+        fields = ['session_date', 'start_time', 'end_time']
+
+class BatchDetailSerializer(serializers.ModelSerializer):
+    """Serializer for batch details with nested class sessions."""
+    batch_name = serializers.CharField(source='batch', read_only=True)
+    batch_start_date = serializers.DateField(read_only=True)
+    batch_end_date = serializers.DateField(read_only=True)
+    classes = ClassSessionDetailSerializer(source='sessions', many=True, read_only=True)
+
+    class Meta:
+        model = ClassSchedule
+        fields = ['batch_name', 'batch_start_date', 'batch_end_date', 'classes']
+
+class CourseSessionSerializer(serializers.ModelSerializer):
+    """Serializer for courses with nested batches and sessions."""
+    course_name = serializers.CharField(source='name', read_only=True)
+    batches = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Course
+        fields = ['course_name', 'batches']
+
+    def get_batches(self, obj):
+        """Get batches (ClassSchedules) for the course, filtered by user role."""
+        request = self.context.get('request')
+        if request.user.is_admin:
+            schedules = ClassSchedule.objects.filter(course=obj)
+        elif request.user.is_teacher:
+            schedules = ClassSchedule.objects.filter(course=obj, teacher=request.user)
+        elif request.user.is_student:
+            schedules = ClassSchedule.objects.filter(
+            course=obj,
+            batch__in=CourseEnrollment.objects.filter(
+                student=request.user,
+                course=obj,
+                subscription__payment_status='completed'
+            ).values('batch')
+        )
+        else:
+            schedules = ClassSchedule.objects.none()
+
+        return BatchDetailSerializer(schedules.order_by('batch', 'batch_start_date'), many=True, context={'request': request}).data
 
 
 class ClassScheduleAssignmentSerializer(serializers.Serializer):
@@ -106,14 +157,14 @@ class ClassScheduleAssignmentSerializer(serializers.Serializer):
             raise serializers.ValidationError({"error": f"Course with ID {value} not found or inactive."})
 
     def validate_batches(self, value):
-        """Ensures batches are valid and unique within this request."""
+        """Ensures batches are valid and unique."""
         valid_batches = ['weekdays', 'weekends']
         if not all(batch in valid_batches for batch in value):
             raise serializers.ValidationError({
                 'error': f"Batches must be one or more of: {', '.join(valid_batches)}."
             })
         if len(value) != len(set(value)):
-            raise serializers.ValidationError({"error": "Duplicate batches are not allowed in the same request."})
+            raise serializers.ValidationError({"error": "Duplicate batches are not allowed."})
         return value
 
     def validate(self, attrs):
@@ -194,7 +245,7 @@ class ClassScheduleSerializer(serializers.ModelSerializer):
     """Serializes ClassSchedule objects for retrieval and updates."""
     course = serializers.CharField(source='course.name', read_only=True)
     course_id = serializers.IntegerField(
-        write_only=True, 
+        write_only=True,
         required=True,
         error_messages={'required': 'Course ID is required.'}
     )
@@ -344,6 +395,11 @@ class ClassScheduleSerializer(serializers.ModelSerializer):
             # Create schedules and sessions
             created_schedules = []
             for schedule in schedules:
+                # Allow same batch as long as timings don’t conflict
+                existing = ClassSchedule.objects.filter(course=course, teacher=teacher, batch=schedule['batch']).first()
+                if existing:
+                    logger.info(f"Teacher {teacher.email} already has a '{schedule['batch']}' batch, checking conflicts only.")
+
                 class_schedule = ClassSchedule.objects.create(
                     course=course,
                     teacher=teacher,
@@ -353,7 +409,7 @@ class ClassScheduleSerializer(serializers.ModelSerializer):
                 )
                 created_schedules.append(class_schedule)
 
-                # Create sessions for all matching days
+                # Create sessions (recurring for all matching days)
                 current_date = schedule['start_date']
                 start_time = parse_time_string(schedule['start_time'])
                 end_time = parse_time_string(schedule['end_time'])
@@ -438,7 +494,7 @@ class ClassScheduleSerializer(serializers.ModelSerializer):
                 batch_end_date=validated_data.get('weekdays_end_date') or validated_data.get('weekend_end_date')
             )
 
-            # Create sessions for all matching days
+            # Create sessions (recurring for all matching days)
             for schedule in schedules:
                 current_date = schedule['start_date']
                 start_time = parse_time_string(schedule['start_time'])

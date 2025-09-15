@@ -7,11 +7,8 @@ from drf_yasg import openapi
 from django.utils import timezone
 from datetime import timedelta
 from edu_platform.permissions.auth_permissions import IsAdmin, IsTeacher
-from edu_platform.models import User, ClassSchedule, ClassSession
-from edu_platform.serializers.class_serializers import ClassScheduleSerializer, ClassSessionSerializer
-from botocore.exceptions import ClientError
-from django.db.models import Q
-import boto3
+from edu_platform.models import User, ClassSchedule, ClassSession, Course, CourseEnrollment
+from edu_platform.serializers.class_serializers import ClassScheduleSerializer, ClassSessionSerializer, ClassSessionDetailSerializer, CourseSessionSerializer
 import logging
 
 logger = logging.getLogger(__name__)
@@ -62,7 +59,7 @@ class ClassScheduleView(APIView):
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @swagger_auto_schema(
-        operation_description="Create a class schedule with sessions (admin only for batch assignments, admin/teacher for single batch)",
+        operation_description="Create a class schedule with sessions (admin or teacher)",
         request_body=ClassScheduleSerializer,
         responses={
             201: openapi.Response(
@@ -312,5 +309,65 @@ class ClassSessionRecordingView(APIView):
             logger.error(f"Error updating recording URL: {str(e)}")
             return Response({
                 'error': f'Failed to update recording URL: {str(e)}',
+                'status': status.HTTP_500_INTERNAL_SERVER_ERROR
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+class ClassSessionListView(APIView):
+    """Lists all class sessions grouped by course and batch."""
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_description="List all courses with their batches and class sessions (admin: all courses; teacher: assigned courses; student: enrolled batches)",
+        responses={
+            200: openapi.Response(
+                description="List of courses with batches and sessions",
+                schema=CourseSessionSerializer(many=True)
+            ),
+            403: openapi.Response(
+                description="Permission denied",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'error': openapi.Schema(type=openapi.TYPE_STRING),
+                        'status': openapi.Schema(type=openapi.TYPE_INTEGER)
+                    }
+                )
+            ),
+            500: openapi.Response(
+                description="Server error",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'error': openapi.Schema(type=openapi.TYPE_STRING),
+                        'status': openapi.Schema(type=openapi.TYPE_INTEGER)
+                    }
+                )
+            )
+        }
+    )
+    def get(self, request, *args, **kwargs):
+        """Lists courses with their batches and class sessions based on user role."""
+        try:
+            if request.user.is_admin:
+                courses = Course.objects.all()
+            elif request.user.is_teacher:
+                courses = Course.objects.filter(class_schedules__teacher=request.user).distinct()
+            elif request.user.is_student:
+                courses = Course.objects.filter(
+                enrollments__student=request.user,
+                enrollments__subscription__payment_status='completed'
+            ).distinct()
+            else:
+                return Response({
+                    'error': 'You do not have permission to access class sessions.',
+                    'status': status.HTTP_403_FORBIDDEN
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            serializer = CourseSessionSerializer(courses, many=True, context={'request': request})
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except Exception as e:
+            logger.error(f"Error retrieving class sessions: {str(e)}")
+            return Response({
+                'error': f'Failed to retrieve sessions: {str(e)}',
                 'status': status.HTTP_500_INTERNAL_SERVER_ERROR
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
