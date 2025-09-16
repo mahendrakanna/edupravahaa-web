@@ -58,7 +58,7 @@ __pycache__/
 # Django Migrations (keep __init__.py)
 **/migrations/*.py
 
-# Media and Static (ignore generated/uploaded files, keep folders)
+# Media folder: keep the folder, ignore contents
 media/*
 !media/.gitkeep
 static/*
