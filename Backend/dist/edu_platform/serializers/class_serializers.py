@@ -19,25 +19,16 @@ def parse_time_string(value):
 class ClassSessionSerializer(serializers.ModelSerializer):
     class Meta:
         model = ClassSession
-        fields = ['class_id', 'start_time', 'end_time', 'recording_url', 'is_active']
-        read_only_fields = ['class_id', 'recording_url', 'is_active']
+        fields = ['id', 'session_date', 'start_time', 'end_time', 'recording_url', 'is_active']
+        read_only_fields = ['is_active']
 
-class ClassSessionDetailSerializer(serializers.ModelSerializer):
-    """Serializer for class session details."""
-    session_date = serializers.DateField(read_only=True)
-    start_time = serializers.DateTimeField(read_only=True, format="%Y-%m-%dT%H:%M:%SZ")
-    end_time = serializers.DateTimeField(read_only=True, format="%Y-%m-%dT%H:%M:%SZ")
-
-    class Meta:
-        model = ClassSession
-        fields = ['session_date', 'start_time', 'end_time']
 
 class BatchDetailSerializer(serializers.ModelSerializer):
     """Serializer for batch details with nested class sessions."""
     batch_name = serializers.CharField(source='batch', read_only=True)
     batch_start_date = serializers.DateField(read_only=True)
     batch_end_date = serializers.DateField(read_only=True)
-    classes = ClassSessionDetailSerializer(source='sessions', many=True, read_only=True)
+    classes = ClassSessionSerializer(source='sessions', many=True, read_only=True)
 
     class Meta:
         model = ClassSchedule
@@ -269,7 +260,7 @@ class ClassScheduleSerializer(serializers.ModelSerializer):
     sunday_end = serializers.CharField(max_length=8, required=False)
     # For adding multiple batches to existing teachers
     teacher_id = serializers.IntegerField(
-        write_only=True, 
+        write_only=True,
         required=False,
         error_messages={'required': 'Teacher ID is required for batch assignment.'}
     )
@@ -278,9 +269,9 @@ class ClassScheduleSerializer(serializers.ModelSerializer):
     class Meta:
         model = ClassSchedule
         fields = [
-            'id', 'course', 'course_id', 'teacher', 'teacher_id', 'batch', 
-            'sessions', 'weekdays_start_date', 'weekdays_end_date', 'weekdays_days', 
-            'weekdays_start', 'weekdays_end', 'weekend_start_date', 'weekend_end_date', 
+            'id', 'course', 'course_id', 'teacher', 'teacher_id', 'batch',
+            'sessions', 'weekdays_start_date', 'weekdays_end_date', 'weekdays_days',
+            'weekdays_start', 'weekdays_end', 'weekend_start_date', 'weekend_end_date',
             'saturday_start', 'saturday_end', 'sunday_start', 'sunday_end', 'batch_assignment'
         ]
 
@@ -419,7 +410,6 @@ class ClassScheduleSerializer(serializers.ModelSerializer):
                         session_start = timezone.make_aware(datetime.combine(current_date, start_time))
                         session_end = timezone.make_aware(datetime.combine(current_date, end_time))
                         ClassSession.objects.create(
-                            class_id=uuid.uuid4(),
                             schedule=class_schedule,
                             session_date=current_date,
                             start_time=session_start,
@@ -505,7 +495,6 @@ class ClassScheduleSerializer(serializers.ModelSerializer):
                         session_start = timezone.make_aware(datetime.combine(current_date, start_time))
                         session_end = timezone.make_aware(datetime.combine(current_date, end_time))
                         ClassSession.objects.create(
-                            class_id=uuid.uuid4(),
                             schedule=class_schedule,
                             session_date=current_date,
                             start_time=session_start,

@@ -21,6 +21,7 @@ class User(AbstractUser):
     )
     
     role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='student')
+    username = models.CharField(max_length=150, blank=True, null=True, unique=True)
     email = models.EmailField(unique=True)
     phone_number = models.CharField(max_length=15, unique=True, null=True, blank=True)
     email_verified = models.BooleanField(default=False)

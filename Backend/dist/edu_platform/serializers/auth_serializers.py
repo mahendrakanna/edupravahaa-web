@@ -48,6 +48,48 @@ def check_user_existence_utility(email=None, phone_number=None):
             'error': 'This phone number is already registered.'
         })
 
+class StudentProfileSerializer(serializers.ModelSerializer):
+    """Serializes student profile data."""
+    is_trial = serializers.SerializerMethodField()
+    has_purchased = serializers.SerializerMethodField()
+
+    class Meta:
+        model = StudentProfile
+        fields = ['profile_picture', 'is_trial', 'has_purchased']
+        read_only_fields = ['is_trial', 'has_purchased']
+
+    def validate_profile_picture(self, value):
+        """Validates profile picture file."""
+        if value:
+            max_size = 5 * 1024 * 1024  # 5MB
+            if value.size > max_size:
+                raise serializers.ValidationError({
+                    'error': 'Profile picture size must be less than 5MB.'
+                })
+            valid_types = ['image/jpeg', 'image/png', 'image/gif']
+            if value.content_type not in valid_types:
+                raise serializers.ValidationError({
+                    'error': 'Profile picture must be JPEG, PNG, or GIF.'
+                })
+        return value
+
+    def get_is_trial(self, obj):
+        """Returns whether the student is in trial mode."""
+        return not obj.user.has_purchased_courses
+
+    def get_has_purchased(self, obj):
+        """Returns whether the student has purchased courses."""
+        return obj.user.has_purchased_courses
+
+    def to_representation(self, instance):
+        """Customize the response to include trial details for students."""
+        representation = super().to_representation(instance)
+        if not instance.user.has_purchased_courses and instance.user.trial_end_date:
+            representation['trial_ends_at'] = instance.user.trial_end_date.isoformat()
+            representation['trial_remaining_seconds'] = instance.user.trial_remaining_seconds
+        return representation
+
+
 class TeacherProfileSerializer(serializers.ModelSerializer):
     """Serializes teacher profile data."""
 
@@ -138,10 +180,13 @@ class UserSerializer(serializers.ModelSerializer):
 class ProfileUpdateSerializer(serializers.ModelSerializer):
     """Serializes user data for profile updates in ProfileView."""
     profile = serializers.SerializerMethodField(read_only=True)
+    identifier = serializers.CharField(required=False, write_only=True)
+    otp_code = serializers.CharField(max_length=4, required=False, write_only=True)
+    purpose = serializers.ChoiceField(choices=['profile_update'], required=False, write_only=True)
     
     class Meta:
         model = User
-        fields = ['id', 'username', 'phone_number', 'password', 'profile']
+        fields = ['id', 'username', 'phone_number', 'password', 'profile', 'identifier', 'otp_code', 'purpose']
         read_only_fields = ['id', 'email', 'first_name', 'last_name', 'role', 'email_verified', 'phone_verified', 'date_joined']
         extra_kwargs = {
             'password': {'write_only': True}
@@ -169,8 +214,8 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, attrs):
-        """Ensures only allowed fields are included in the request."""
-        request = self.context.get('request')  # Fixed: Define request here
+        """Ensures only allowed fields are included in the request and validates OTP for phone updates."""
+        request = self.context.get('request')
         user = request.user
         allowed_fields = {'username', 'phone_number', 'password', 'identifier', 'otp_code', 'purpose'}
         
@@ -188,19 +233,18 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
         if user.is_student:
             nested_profile_keys = [k for k in request_data_keys if k.startswith('profile[') and k.endswith(']')]
             logger.debug(f"Nested profile keys: {nested_profile_keys}")
-            invalid_fields -= set(nested_profile_keys)  # Ignore (allow) nested keys for students
+            invalid_fields -= set(nested_profile_keys)
         
         if invalid_fields:
             raise serializers.ValidationError({
                 'error': f'Cannot update restricted fields: {", ".join(invalid_fields)}'
             })
         
-        # Ensure students provide identifier, otp_code, and purpose for phone number updates
-        # Fixed: Use defined request
-        if user.is_student and 'phone_number' in request.data:
+        # Ensure identifier, otp_code, and purpose are provided for phone number updates
+        if 'phone_number' in request.data:
             if not all(key in request.data for key in ['identifier', 'otp_code', 'purpose']):
                 raise serializers.ValidationError({
-                    'error': 'Students must provide identifier, otp_code, and purpose for phone number updates.'
+                    'error': 'Must provide identifier, otp_code, and purpose for phone number updates.'
                 })
         
         return attrs
@@ -224,20 +268,22 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         """Handles partial update of user and profile data."""
         request = self.context['request']
-        logger.debug(f"Request FILES: {dict(request.FILES)}")  # Debug files
+        logger.debug(f"Request FILES: {dict(request.FILES)}")
         
-        # Update user fields (username, password, and phone_number for teachers)
+        # Pop OTP-related fields
+        identifier = validated_data.pop('identifier', None)
+        otp_code = validated_data.pop('otp_code', None)
+        purpose = validated_data.pop('purpose', None)
+        
+        # Update user fields (username, password)
         for attr, value in validated_data.items():
             if attr == 'password':
                 instance.set_password(value)
             elif attr == 'username':
                 setattr(instance, attr, value)
-            elif attr == 'phone_number' and instance.is_teacher:
-                instance.phone_number = value
-                instance.phone_verified = True
         instance.save()
 
-        # Enhanced: Update student profile (handle flat 'profile_picture' and nested 'profile[profile_picture]')
+        # Handle student profile updates
         if instance.is_student:
             profile_data = {}
             profile_files = {}
@@ -251,8 +297,7 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
             for key, file_obj in request.FILES.items():
                 if key == 'profile_picture':
                     profile_files['profile_picture'] = file_obj
-                elif key.startswith('profile[') and k.endswith(']'):
-                    # e.g., 'profile[profile_picture]' -> 'profile_picture'
+                elif key.startswith('profile[') and key.endswith(']'):
                     field_name = key.split('[')[1].split(']')[0]
                     profile_files[field_name] = file_obj
                 logger.debug(f"Extracted file: {key} -> {field_name if 'field_name' in locals() else key}")
@@ -295,19 +340,14 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
                         'error': f'Failed to update profile: {str(e)}'
                     })
 
-        # Update student phone number if provided with OTP (unchanged, but consistent)
-        if instance.is_student and 'identifier' in request.data:
-            phone_data = {
-                'identifier': request.data.get('identifier'),
-                'otp_code': request.data.get('otp_code'),
-                'purpose': request.data.get('purpose', 'profile_update')
-            }
+        # Update phone number with OTP verification for both students and teachers
+        if 'phone_number' in request.data and identifier and otp_code and purpose:
             try:
-                identifier = phone_data['identifier']
-                otp_code = phone_data['otp_code']
-                purpose = phone_data['purpose']
-
-                # Validate identifier
+                phone_data = {
+                    'identifier': identifier,
+                    'otp_code': otp_code,
+                    'purpose': purpose
+                }
                 identifier_type = 'phone'
                 identifier, identifier_type = validate_identifier_utility(identifier, identifier_type)
 
@@ -560,6 +600,7 @@ class TeacherCourseAssignmentSerializer(serializers.Serializer):
                         })
                 current_date += timedelta(days=1)
 
+
 class TeacherCreateSerializer(serializers.ModelSerializer):
     """Serializes teacher registration data with course assignments."""
     password = serializers.CharField(write_only=True, min_length=8)
@@ -779,6 +820,7 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
             if 'user' in locals():
                 user.delete()
             raise serializers.ValidationError({"error": f"Failed to create teacher: {str(e)}"})
+
 
 class AdminCreateSerializer(serializers.ModelSerializer):
     """Handles admin user creation by any user."""
@@ -1112,23 +1154,3 @@ class ForgotPasswordSerializer(serializers.Serializer):
         return user
 
 
-class StudentProfileSerializer(serializers.ModelSerializer):
-    """Serializes student profile data."""
-    class Meta:
-        model = StudentProfile
-        fields = ['profile_picture']
-    
-    def validate_profile_picture(self, value):
-        """Validates profile picture file."""
-        if value:
-            max_size = 5 * 1024 * 1024  # 5MB
-            if value.size > max_size:
-                raise serializers.ValidationError({
-                    'error': 'Profile picture size must be less than 5MB.'
-                })
-            valid_types = ['image/jpeg', 'image/png', 'image/gif']
-            if value.content_type not in valid_types:
-                raise serializers.ValidationError({
-                    'error': 'Profile picture must be JPEG, PNG, or GIF.'
-                })
-        return value

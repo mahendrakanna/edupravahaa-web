@@ -12,8 +12,12 @@ class EduPlatformConfig(AppConfig):
         # Start background thread for trial cleanup
         # Only start if not in migration or other management commands
         import sys
-        if 'runserver' in sys.argv:
-            self.start_cleanup_thread()
+        # Don’t run during migrations or shell
+        if any(cmd in sys.argv for cmd in ['migrate', 'makemigrations', 'createsuperuser', 'shell']):
+            return
+
+        # Start thread for any ASGI/WSGI server (runserver, daphne, uvicorn, gunicorn, etc.)
+        self.start_cleanup_thread()
     
     def start_cleanup_thread(self):
         """Start a background thread to cleanup expired trials"""
