@@ -10,5 +10,5 @@ urlpatterns = [
     path('classroom/test/', TemplateView.as_view(template_name='classroom.html'), name='classroom_test'),
 
     path('sessions/', ClassSessionListView.as_view(), name='session-list'),
-    path('sessions/<uuid:class_id>/', ClassSessionUpdateView.as_view(), name='session-update'),
+    path('sessions/<int:class_id>/', ClassSessionUpdateView.as_view(), name='session-update'),
 ]

@@ -241,6 +241,8 @@ TRIAL_SETTINGS = {
 
 # email and phone number otp expiry time 
 OTP_EXPIRY_MINUTES = int(os.environ.get('OTP_EXPIRY_MINUTES', 5))
+# hour counts for teachers to update class details
+SESSION_UPDATE_CUTOFF_HOURS = 0.1  # ~6 minutes for testing
 
 # logging
 LOGGING = {
