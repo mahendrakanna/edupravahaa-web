@@ -10,14 +10,14 @@ from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from django.utils import timezone
 from edu_platform.permissions.auth_permissions import IsAdmin, IsTeacher, IsStudent
-from edu_platform.models import User, OTP, CourseSubscription, ClassSchedule, ClassSession
+from edu_platform.models import User, OTP, CourseSubscription, ClassSchedule, ClassSession, StudentProfile, TeacherProfile
 from edu_platform.utility.email_services import send_otp_email
 from edu_platform.utility.sms_services import get_sms_service, ConsoleSMSService
 from edu_platform.serializers.auth_serializers import (
     UserSerializer, RegisterSerializer, LoginSerializer, 
     TeacherCreateSerializer, ChangePasswordSerializer,
     SendOTPSerializer, VerifyOTPSerializer, ProfileUpdateSerializer,
-    ForgotPasswordSerializer, AdminCreateSerializer, AssignedCourseSerializer
+    ForgotPasswordSerializer, AdminCreateSerializer, StudentProfileSerializer, TeacherProfileSerializer
 )
 import logging
 import phonenumbers
@@ -438,11 +438,6 @@ class LoginView(generics.GenericAPIView):
                 if not user.has_purchased_courses and user.trial_end_date:
                     response_data['trial_ends_at'] = user.trial_end_date.isoformat()
                     response_data['trial_remaining_seconds'] = user.trial_remaining_seconds
-            
-            # # Include assigned courses for teachers
-            # if user.role == 'teacher':
-            #     schedules = ClassSchedule.objects.filter(teacher=user)
-            #     response_data['assigned_courses'] = AssignedCourseSerializer(schedules, many=True).data
 
             return Response(response_data, status=status.HTTP_200_OK)
         
@@ -519,26 +514,70 @@ class ProfileView(generics.RetrieveUpdateAPIView):
     permission_classes = [IsAuthenticated]
     
     def get_serializer_class(self):
-        """Returns the appropriate serializer based on the request method."""
+        """Returns the appropriate serializer based on the request method and user role."""
         if self.request.method == 'GET':
+            user = self.request.user  # Use request.user directly to avoid calling get_object twice
+            if user.is_student:
+                return StudentProfileSerializer
+            elif user.is_teacher:
+                return TeacherProfileSerializer
             return UserSerializer
         return ProfileUpdateSerializer
+    
+    def get_object(self):
+        """Returns the appropriate object based on user role."""
+        user = self.request.user
+        logger.debug(f"Fetching object for user {user.id}, role: {user.role}")
+        if user.is_student:
+            try:
+                profile = StudentProfile.objects.get(user=user)
+                logger.debug(f"Found StudentProfile for user {user.id}")
+                return profile
+            except StudentProfile.DoesNotExist:
+                logger.error(f"Student profile not found for user {user.id}")
+                raise serializers.ValidationError({
+                    'error': 'Student profile not found.',
+                    'status': status.HTTP_404_NOT_FOUND
+                })
+        elif user.is_teacher:
+            try:
+                profile = TeacherProfile.objects.get(user=user)
+                logger.debug(f"Found TeacherProfile for user {user.id}")
+                return profile
+            except TeacherProfile.DoesNotExist:
+                logger.error(f"Teacher profile not found for user {user.id}")
+                raise serializers.ValidationError({
+                    'error': 'Teacher profile not found.',
+                    'status': status.HTTP_404_NOT_FOUND
+                })
+        logger.debug(f"Returning User object for user {user.id}")
+        return user
     
     @swagger_auto_schema(
         responses={
             200: openapi.Response(
-                description="Profile retrieved or updated successfully",
+                description="Profile retrieved successfully",
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
                         'message': openapi.Schema(type=openapi.TYPE_STRING),
+                        'message_type': openapi.Schema(type=openapi.TYPE_STRING, enum=['success', 'error']),
                         'data': openapi.Schema(type=openapi.TYPE_OBJECT),
-                        'user_type': openapi.Schema(type=openapi.TYPE_STRING, description="Type of user (student or teacher)")
                     }
                 )
             ),
             400: openapi.Response(
                 description="Invalid input",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'error': openapi.Schema(type=openapi.TYPE_STRING),
+                        'status': openapi.Schema(type=openapi.TYPE_INTEGER, description="HTTP status code")
+                    }
+                )
+            ),
+            404: openapi.Response(
+                description="Profile not found",
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
@@ -561,17 +600,27 @@ class ProfileView(generics.RetrieveUpdateAPIView):
     )
     def get(self, request, *args, **kwargs):
         """Retrieves authenticated user's profile."""
-        serializer = self.get_serializer(self.get_object())
-        user_type = 'student' if self.get_object().is_student else 'teacher' if self.get_object().is_teacher else 'unknown'
-        return Response({
-            'message': 'Profile retrieved successfully.',
-            'data': serializer.data,
-            'user_type': user_type
-        }, status=status.HTTP_200_OK)
+        try:
+            instance = self.get_object()
+            serializer_class = self.get_serializer_class()
+            logger.debug(f"Using serializer {serializer_class.__name__} for instance {type(instance).__name__}")
+            serializer = serializer_class(instance, context={'request': request, 'is_nested': False})
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except serializers.ValidationError as e:
+            return Response({
+                'error': str(e.detail.get('error', 'Profile retrieval failed.')),
+                'status': e.detail.get('status', status.HTTP_400_BAD_REQUEST)
+            }, status=e.detail.get('status', status.HTTP_400_BAD_REQUEST))
+        except Exception as e:
+            logger.error(f"Profile retrieval error for user {request.user.id}: {str(e)}")
+            return Response({
+                'error': 'Failed to retrieve profile. Please try again.',
+                'status': status.HTTP_500_INTERNAL_SERVER_ERROR
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     def patch(self, request, *args, **kwargs):
         """Updates authenticated user's profile (partial update)."""
-        user = self.get_object()
+        user = self.request.user
         if not (user.is_student or user.is_teacher):
             return Response({
                 'error': 'Only students and teachers can update their profiles.',
@@ -597,10 +646,6 @@ class ProfileView(generics.RetrieveUpdateAPIView):
                 'error': 'Failed to update profile. Please try again.',
                 'status': status.HTTP_500_INTERNAL_SERVER_ERROR
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    
-    def get_object(self):
-        """Returns the authenticated user."""
-        return self.request.user
 
 
 class TeacherRegisterView(generics.CreateAPIView):

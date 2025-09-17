@@ -51,12 +51,11 @@ def check_user_existence_utility(email=None, phone_number=None):
 class StudentProfileSerializer(serializers.ModelSerializer):
     """Serializes student profile data."""
     is_trial = serializers.SerializerMethodField()
-    has_purchased = serializers.SerializerMethodField()
 
     class Meta:
         model = StudentProfile
-        fields = ['profile_picture', 'is_trial', 'has_purchased']
-        read_only_fields = ['is_trial', 'has_purchased']
+        fields = ['profile_picture', 'is_trial']
+        read_only_fields = ['is_trial']
 
     def validate_profile_picture(self, value):
         """Validates profile picture file."""
@@ -82,13 +81,46 @@ class StudentProfileSerializer(serializers.ModelSerializer):
         return obj.user.has_purchased_courses
 
     def to_representation(self, instance):
-        """Customize the response to include trial details for students."""
-        representation = super().to_representation(instance)
-        if not instance.user.has_purchased_courses and instance.user.trial_end_date:
-            representation['trial_ends_at'] = instance.user.trial_end_date.isoformat()
-            representation['trial_remaining_seconds'] = instance.user.trial_remaining_seconds
-        return representation
-
+        """Customize the response based on whether the serializer is nested."""
+        user = instance.user
+        profile_data = super().to_representation(instance)
+        
+        # Check if the serializer is nested (e.g., called by UserSerializer)
+        is_nested = self.context.get('is_nested', False)
+        
+        if is_nested:
+            # When nested, return only profile-specific fields
+            representation = {
+                'profile_picture': profile_data.get('profile_picture'),
+                'is_trial': profile_data.get('is_trial')
+            }
+            if not user.has_purchased_courses and user.trial_end_date:
+                representation['trial_ends_at'] = user.trial_end_date.isoformat()
+                representation['trial_remaining_seconds'] = user.trial_remaining_seconds
+            return representation
+        
+        # When not nested, construct the full response structure
+        data = {
+            'id': user.id,
+            'username': user.username,
+            'email': user.email,
+            'phone_number': user.phone_number,
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+            'role': user.role,
+            'email_verified': user.email_verified,
+            'phone_verified': user.phone_verified,
+            'date_joined': user.date_joined.isoformat(),
+            'profile_picture': profile_data.get('profile_picture'),
+            'has_purchased': self.get_has_purchased(instance)
+        }
+        
+        # Construct the final response structure
+        return {
+            'message': 'Profile retrieved successfully.',
+            'message_type': 'success',
+            'data': data
+        }
 
 class TeacherProfileSerializer(serializers.ModelSerializer):
     """Serializes teacher profile data."""
@@ -132,12 +164,56 @@ class TeacherProfileSerializer(serializers.ModelSerializer):
             })
         return value
 
-class AssignedCourseSerializer(serializers.ModelSerializer):
-    course = CourseSerializer(read_only=True)
-    
-    class Meta:
-        model = ClassSchedule
-        fields = ['course']
+    def to_representation(self, instance):
+        """Customize the response based on whether the serializer is nested."""
+        user = instance.user
+        profile_data = super().to_representation(instance)
+        
+        # Check if the serializer is nested (e.g., called by UserSerializer)
+        is_nested = self.context.get('is_nested', False)
+        
+        if is_nested:
+            # When nested, return only profile-specific fields
+            return {
+                'qualification': profile_data.get('qualification'),
+                'experience_years': profile_data.get('experience_years'),
+                'specialization': profile_data.get('specialization'),
+                'bio': profile_data.get('bio'),
+                'profile_picture': profile_data.get('profile_picture'),
+                'linkedin_url': profile_data.get('linkedin_url'),
+                'resume': profile_data.get('resume'),
+                'is_verified': profile_data.get('is_verified'),
+                'teaching_languages': profile_data.get('teaching_languages')
+            }
+        
+        # When not nested, construct the full response structure
+        data = {
+            'id': user.id,
+            'username': user.username,
+            'email': user.email,
+            'phone_number': user.phone_number,
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+            'role': user.role,
+            'email_verified': user.email_verified,
+            'phone_verified': user.phone_verified,
+            'date_joined': user.date_joined.isoformat(),
+            'qualification': profile_data.get('qualification'),
+            'experience_years': profile_data.get('experience_years'),
+            'specialization': profile_data.get('specialization'),
+            'bio': profile_data.get('bio'),
+            'profile_picture': profile_data.get('profile_picture'),
+            'linkedin_url': profile_data.get('linkedin_url'),
+            'is_verified': profile_data.get('is_verified'),
+            'teaching_languages': profile_data.get('teaching_languages')
+        }
+        
+        # Construct the final response structure
+        return {
+            'message': 'Profile retrieved successfully.',
+            'message_type': 'success',
+            'data': data
+        }
 
 class UserSerializer(serializers.ModelSerializer):
     """Serializes basic user data for retrieval and updates."""
@@ -165,10 +241,10 @@ class UserSerializer(serializers.ModelSerializer):
         try:
             if obj.is_teacher:
                 profile = TeacherProfile.objects.get(user=obj)
-                return TeacherProfileSerializer(profile, context=self.context).data
+                return TeacherProfileSerializer(profile, context={'request': self.context.get('request'), 'is_nested': True}).data
             elif obj.is_student:
                 profile = StudentProfile.objects.get(user=obj)
-                return StudentProfileSerializer(profile, context=self.context).data
+                return StudentProfileSerializer(profile, context={'request': self.context.get('request'), 'is_nested': True}).data
             return None
         except Exception as e:
             logger.error(f"Error serializing profile for user {obj.id}: {str(e)}")
@@ -255,10 +331,10 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
         try:
             if obj.is_teacher:
                 profile = TeacherProfile.objects.get(user=obj)
-                return TeacherProfileSerializer(profile, context=self.context).data
+                return TeacherProfileSerializer(profile, context={'request': self.context.get('request'), 'is_nested': True}).data
             elif obj.is_student:
                 profile = StudentProfile.objects.get(user=obj)
-                return StudentProfileSerializer(profile, context=self.context).data
+                return StudentProfileSerializer(profile, context={'request': self.context.get('request'), 'is_nested': True}).data
             return None
         except Exception as e:
             logger.error(f"Error serializing profile for user {obj.id}: {str(e)}")
