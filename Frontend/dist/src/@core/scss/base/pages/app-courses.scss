@@ -1,0 +1,164 @@
+/* ---------------------------
+   My Courses Global Styling
+---------------------------- */
+
+@import '../bootstrap-extended/include'; 
+@import '../components/include'; 
+
+/* ---------------------------
+   Container Styling
+---------------------------- */
+.my-courses-container {
+  background-color: $white;
+  color: $body-color;
+  padding: 1.5rem;
+  border-radius: 0.75rem;
+
+  h2 {
+    color: $body-color;
+    font-weight: 600;
+  }
+
+  .card {
+    background-color: $white;
+    color: $body-color;
+    border: 1px solid rgba(0, 0, 0, 0.05);
+    transition: transform 0.2s ease-in-out, background-color 0.3s ease;
+
+    &:hover {
+      transform: translateY(-5px);
+      box-shadow: $theme-dark-box-shadow;
+    }
+
+    .card-title {
+      font-weight: 600;
+    }
+  }
+}
+
+/* ---------------------------
+   Dark Theme Overrides
+---------------------------- */
+.dark-layout {
+  .my-courses-container {
+    background-color: $theme-dark-card-bg; 
+    color: $theme-dark-body-color;
+
+    h2 {
+      color: $theme-dark-headings-color;
+    }
+
+    .card {
+      background-color: $theme-dark-card-bg;
+      color: $theme-dark-body-color;
+      border: 1px solid $theme-dark-border-color;
+      box-shadow: $theme-dark-box-shadow;
+
+      &:hover {
+        background-color: lighten($theme-dark-card-bg, 4%);
+      }
+
+      .card-title,
+      .card-text {
+        color: $theme-dark-body-color;
+      }
+    }
+  }
+}
+
+/* ---------------------------
+   Course Card Styling
+---------------------------- */
+.course-card {
+  transition: transform 0.2s ease-in-out, box-shadow 0.3s ease;
+  border-radius: 0.75rem;
+  overflow: hidden;
+
+  &:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+  }
+}
+
+/* ---------------------------
+   Course Modal Styling
+---------------------------- */
+.course-modal-body {
+  font-size: 1rem;
+
+  .lead {
+    font-size: 1.05rem;
+    color: $body-color;
+  }
+
+  .market-worth {
+    font-size: 0.95rem;
+    color: darken($body-color, 15%);
+  }
+}
+
+/* Dark overrides for modal */
+.dark-layout {
+  .course-modal-body {
+    .lead,
+    .market-worth {
+      color: $theme-dark-text-muted-color;
+    }
+  }
+}
+
+/* Fix close icon position in modal header */
+.modal-header-custom .btn-close {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  padding: 0.5rem;
+  margin: 0;
+  z-index: 10;
+}
+
+/* ---------------------------
+   Global Button & Utility Overrides
+---------------------------- */
+.my-courses-btn {
+  background-color: $primary;
+  color: $white;
+  font-weight: 500;
+  padding: 0.65rem 1.2rem;
+  border-radius: 0.5rem;
+  transition: all 0.3s ease;
+
+  &:hover {
+    background-color: darken($primary, 8%);
+    color: $white;
+  }
+}
+
+.dark-layout {
+  .my-courses-btn {
+    background-color: lighten($theme-dark-card-bg, 10%);
+    color: $theme-dark-body-color;
+
+    &:hover {
+      background-color: lighten($theme-dark-card-bg, 15%);
+      color: $theme-dark-headings-color;
+    }
+  }
+}
+
+/* ---------------------------
+   Responsive Fixes
+---------------------------- */
+@media (max-width: 576px) {
+  .course-modal-body {
+    font-size: 0.9rem;
+  }
+
+  .modal-lg {
+    max-width: 95% !important;
+  }
+
+  .my-courses-container {
+    padding: 1rem;
+  }
+}
