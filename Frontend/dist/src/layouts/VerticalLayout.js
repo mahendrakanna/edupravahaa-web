@@ -11,7 +11,7 @@ import { useSelector } from 'react-redux'
 
 const VerticalLayout = props => {
   const userRole = useSelector(state => state.auth.user?.role)
-  const enrolled = useSelector(state => state.auth.user?.enrolled)
+  const enrolled = useSelector(state => state.auth.user)
 
   // const [menuData, setMenuData] = useState([])
 
@@ -19,7 +19,7 @@ const VerticalLayout = props => {
   // useEffect(() => {
   //   axios.get(URL).then(response => setMenuData(response.data))
   // }, [])
-  console.log('userRole',userRole)
+  console.log('userRole',enrolled)
   const filteredMenuData = navigation
   .filter(item => !item.roles || item.roles.includes(userRole))
   .map(item => {

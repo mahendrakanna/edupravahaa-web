@@ -20,7 +20,6 @@ import {
 } from "reactstrap"
 import { FaCheckCircle, FaChartLine, FaClock } from "react-icons/fa"
 import toast from "react-hot-toast"
-import "./CourseCard.css"
 import { fetchCourses } from "../../../redux/coursesSlice"
 import { getTrialPeriod } from "../../../redux/authentication"
 
@@ -31,7 +30,6 @@ const CourseCard = ({ course }) => {
     setModal(!modal)
     setSelectedBatch(null) 
   }
-  console.log("course", course)
   const token = useSelector((state) => state.auth.token)
   const razorpay_key = import.meta.env.VITE_RAZORPAY_KEY
   const BaseUrl = import.meta.env.VITE_API_BASE_URL
@@ -104,11 +102,14 @@ const CourseCard = ({ course }) => {
   }
 
   // ✅ Group batches if available
-  const groupedBatches = course.schedule?.reduce((acc, batch) => {
+
+const groupedBatches = course.schedule?.reduce((acc, batch) => {
   if (!acc[batch.type]) {
     acc[batch.type] = { 
-      ...batch, 
-      sessions: batch.days.map((day) => ({ day, time: batch.time })) 
+      type: batch.type,
+      sessions: batch.days.map((day) => ({ day, time: batch.time })),
+      startDate: batch.batchStartDate,
+      endDate: batch.batchEndDate
     }
   } else {
     batch.days.forEach((day) => {
@@ -118,7 +119,8 @@ const CourseCard = ({ course }) => {
   return acc
 }, {})
 
-  const batchList = groupedBatches ? Object.values(groupedBatches) : []
+const batchList = groupedBatches ? Object.values(groupedBatches) : []
+
 
   return (
     <>
@@ -196,7 +198,7 @@ const CourseCard = ({ course }) => {
 
           {/* ✅ Show selected batch details */}
           {selectedBatch && (
-            <div className="mt-1 p-1 border rounded bg-light">
+            <div className="mt-1 p-1 border rounded">
               <h6 className="fw-bold">Schedule Details:</h6>
               <div>
                 {selectedBatch.sessions.map((s, i) => (
@@ -226,6 +228,7 @@ const CourseCard = ({ course }) => {
               </div>
             </div>
           )}
+
 
           <div className="mt-1 d-flex justify-content-between">
             <span>

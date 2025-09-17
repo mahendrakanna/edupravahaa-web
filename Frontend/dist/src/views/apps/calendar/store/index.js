@@ -30,7 +30,7 @@ export const updateFilter = createAsyncThunk('appCalendar/updateFilter', async (
   return filter
 })
 
-export const updateAllFilters = createAsyncThunk('appCalendar/updateAllFilters', async (value, { dispatch }) => {
+export const  updateAllFilters = createAsyncThunk('appCalendar/updateAllFilters', async (value, { dispatch }) => {
   if (value === true) {
     await dispatch(fetchEvents(['Personal', 'Business', 'Family', 'Holiday', 'ETC']))
   } else {

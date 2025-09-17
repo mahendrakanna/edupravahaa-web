@@ -10,12 +10,9 @@ export const signupUser = createAsyncThunk(
   'auth/signupUser',
   async (userData, { rejectWithValue }) => {
     try {
-      const response = await axios.post(API_URL + apiList.auth.signup, userData);
-      // console.log("Response Data:", response.data);
-
+      const response = await api.post(apiList.auth.signup, userData); // Use api instead of axios
       return response.data;
     } catch (err) {
-        // console.error("Error during signup:", err);
       return rejectWithValue(err.response?.data || err.message);
     }
   }
@@ -23,11 +20,10 @@ export const signupUser = createAsyncThunk(
 
 export const sendOtp = createAsyncThunk(
   'auth/sendOtp',
-  async ( userData, { rejectWithValue }) => {
+  async (userData, { rejectWithValue }) => {
     try {
-      const response = await axios.post(API_URL + apiList.auth.sendOtp, userData);
+      const response = await api.post(apiList.auth.sendOtp, userData);
       return response.data;
-
     } catch (err) {
       return rejectWithValue(err.response?.data || err.message);
     }
@@ -38,7 +34,7 @@ export const verifyOtp = createAsyncThunk(
   'auth/verifyOtp',
   async (otpverifydata, { rejectWithValue }) => {
     try {
-      const response = await axios.post(API_URL + apiList.auth.verifyOtp, otpverifydata);
+      const response = await api.post(apiList.auth.verifyOtp, otpverifydata);
       return response.data;
     } catch (err) {
       return rejectWithValue(err.response?.data || err.message);
@@ -50,9 +46,8 @@ export const loginUser = createAsyncThunk(
   'auth/loginUser',
   async (credentials, { rejectWithValue }) => {
     try {
-      const response = await axios.post(API_URL + apiList.auth.login, credentials);
+      const response = await api.post(apiList.auth.login, credentials);
       return response.data;
-
     } catch (err) {
       return rejectWithValue(err.response?.data || err.message);
     }
@@ -64,7 +59,7 @@ export const getProfile = createAsyncThunk(
   async (_, { rejectWithValue, getState }) => {
     try {
       const token = getState().auth.token;
-      const response = await axios.get(API_URL + apiList.auth.getProfile, {
+      const response = await api.get(apiList.auth.getProfile, {
         headers: { Authorization: `Bearer ${token}` },
       });
       return response.data;
@@ -78,10 +73,7 @@ export const forgotPassword = createAsyncThunk(
   'auth/forgotPassword',
   async (payload, { rejectWithValue }) => {
     try {
-      const response = await axios.post(
-        API_URL + apiList.auth.forgotPassword,
-        payload
-      );
+      const response = await api.post(apiList.auth.forgotPassword, payload);
       return response.data;
     } catch (err) {
       return rejectWithValue(err.response?.data || err.message);
@@ -94,7 +86,7 @@ export const getTrialPeriod = createAsyncThunk(
   async (_, { rejectWithValue, getState }) => {
     try {
       const token = getState().auth.token;
-      const response = await axios.get(API_URL + apiList.student.trialStatus, {
+      const response = await api.get(apiList.student.trialStatus, {
         headers: { Authorization: `Bearer ${token}` },
       });
       return response.data;
@@ -112,10 +104,9 @@ export const logoutUser = createAsyncThunk(
       const { auth } = getState();
       const refreshToken = auth.refreshToken;
       const accessToken = auth.token;
-      // console.log("acc",accessToken)
 
-      const response = await axios.post(
-        API_URL + apiList.auth.logout,
+      const response = await api.post(
+        apiList.auth.logout,
         { refresh: refreshToken },
         {
           headers: {
@@ -144,42 +135,36 @@ export const refreshTokenThunk = createAsyncThunk(
         return rejectWithValue('No refresh token found');
       }
 
-      // ⚡ use plain axios, not `api`
       const response = await axios.post(
-        API_URL + apiList.auth.refresh,
+        `${API_URL}${apiList.auth.refreshToken}`,
         { refresh: refreshToken },
         { headers: { 'Content-Type': 'application/json' } }
       );
 
-      return response.data; // { access: "...", refresh?: "..." }
+      return response.data;
     } catch (err) {
       return rejectWithValue(err.response?.data || err.message);
     }
   }
 );
 
-// update password api
 export const updatePassword = createAsyncThunk(
   'auth/updatePassword',
   async (payload, { rejectWithValue, getState }) => {
     try {
-      const token = getState().auth.token
-      const response = await axios.put(
-        API_URL + apiList.auth.updatePassword,
-        payload,
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      )
-      return response.data
+      const token = getState().auth.token;
+      const response = await api.put(apiList.auth.updatePassword, payload, {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      return response.data;
     } catch (err) {
-      return rejectWithValue(err.response?.data || err.message)
+      return rejectWithValue(err.response?.data || err.message);
     }
   }
-)
+);
 
 
 
@@ -188,38 +173,34 @@ export const updateProfile = createAsyncThunk(
   'auth/updateProfile',
   async (payload, { rejectWithValue, getState }) => {
     try {
-      const token = getState().auth.token
-      const response = await axios.put(
-        API_URL + apiList.auth.getProfile, 
-        payload,
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      )
-      return response.data
+      const token = getState().auth.token;
+      const response = await api.patch(apiList.auth.getProfile, payload, {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      return response.data;
     } catch (err) {
-      return rejectWithValue(err.response?.data || err.message)
+      return rejectWithValue(err.response?.data || err.message);
     }
   }
-)
+);
 
 
 
 const authSlice = createSlice({
   name: 'auth',
   initialState: {
-  user: JSON.parse(localStorage.getItem('userData')) || null,
-  token: localStorage.getItem('access') || null,
-  refreshToken: localStorage.getItem('refresh') || null,
-  trialPeriodData: null,
-  loading: false,
-  error: null,
-  success: false,
-},
-  reducers: {
+    user: JSON.parse(localStorage.getItem('userData')) || null,
+    token: localStorage.getItem('access') || null,
+    refreshToken: localStorage.getItem('refresh') || null,
+    trialPeriodData: null,
+    loading: false,
+    error: null,
+    success: false,
+  },
+ reducers: {
     logout: (state) => {
       state.user = null;
       state.token = null;

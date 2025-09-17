@@ -2,9 +2,11 @@ import { Fragment } from 'react'
 import { Card, CardBody, Button, Input, Label } from 'reactstrap'
 import illustration from '@src/assets/images/pages/calendar-illustration.png'
 
-const SidebarLeft = ({ toggleSidebar, store, dispatch, updateFilter, updateAllFilters, mycourseslist }) => {
+const SidebarLeft = ({ toggleSidebar, store, dispatch, updateFilter, updateAllFilters, sessions }) => {
+  const courseNames = sessions?.map(c => c.course_name) || []
+
   const handleSelectAll = (checked) => {
-    dispatch(updateAllFilters({ all: checked, mycourseslist }))
+    dispatch(updateAllFilters({ all: checked, sessions }))
   }
 
   return (
@@ -27,7 +29,7 @@ const SidebarLeft = ({ toggleSidebar, store, dispatch, updateFilter, updateAllFi
               id='view-all'
               type='checkbox'
               className='select-all'
-              checked={store.selectedCalendars.length === mycourseslist.length}
+              checked={store.selectedCalendars.length === courseNames.length}
               onChange={e => handleSelectAll(e.target.checked)}
             />
             <Label className='form-check-label' for='view-all'>View All</Label>
@@ -35,22 +37,19 @@ const SidebarLeft = ({ toggleSidebar, store, dispatch, updateFilter, updateAllFi
 
           {/* Course checkboxes */}
           <div className='calendar-events-filter'>
-            {mycourseslist && mycourseslist.map(courseObj => {
-              const course = courseObj.course
-              return (
-                <div className='form-check' key={course.id}>
-                  <Input
-                    type='checkbox'
-                    id={`course-${course.id}`}
-                    checked={store.selectedCalendars.includes(course.id)}
-                    onChange={() => dispatch(updateFilter(course.id))}
-                  />
-                  <Label className='form-check-label' for={`course-${course.id}`}>
-                    {course.name}
-                  </Label>
-                </div>
-              )
-            })}
+            {sessions?.map((course, i) => (
+              <div className='form-check' key={i}>
+                <Input
+                  type='checkbox'
+                  id={`course-${i}`}
+                  checked={store.selectedCalendars.includes(course.course_name)}
+                  onChange={() => dispatch(updateFilter(course.course_name))}
+                />
+                <Label className='form-check-label' for={`course-${i}`}>
+                  {course.course_name}
+                </Label>
+              </div>
+            ))}
           </div>
         </CardBody>
       </Card>

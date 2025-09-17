@@ -7,13 +7,13 @@ import SidebarLeft from './SidebarLeft'
 import { useSelector, useDispatch } from 'react-redux'
 import { updateFilter, updateAllFilters } from './store'
 import '@styles/react/apps/app-calendar.scss'
-import { fetchMyCourses } from '../../../redux/coursesSlice'
+import { fetchMyCourses, fetchSessions } from '../../../redux/coursesSlice'
 import { useRTL } from '@hooks/useRTL'
 
 const CalendarComponent = () => {
   const dispatch = useDispatch()
   const store = useSelector(state => state.calendar)
-  const { mycourseslist } = useSelector((state) => state.courses)
+  const { mycourseslist ,sessions} = useSelector((state) => state.courses)
 
   const [calendarApi, setCalendarApi] = useState(null)
   const [leftSidebarOpen, setLeftSidebarOpen] = useState(false)
@@ -32,15 +32,17 @@ const CalendarComponent = () => {
 
   // fetch courses on mount
   useEffect(() => {
-    dispatch(fetchMyCourses())
+    dispatch(fetchSessions())
   }, [dispatch])
 
   // default select all when courses load
   useEffect(() => {
-    if (mycourseslist?.length > 0) {
-      dispatch(updateAllFilters({ all: true, mycourseslist }))
+    if (sessions?.length > 0) {
+      dispatch(updateAllFilters({ all: true, sessions }))
     }
-  }, [mycourseslist, dispatch])
+  }, [sessions, dispatch])
+
+  console.log('Sessions from Redux:', sessions);
 
   // helper: build schedule dates
   function getScheduleDates(schedule) {
@@ -75,36 +77,38 @@ const CalendarComponent = () => {
     return `${hours.toString().padStart(2, '0')}:${minutes}:00`
   }
 
-  // build events from courses
-  const courseEvents = mycourseslist?.flatMap(courseObj => {
-    const course = courseObj.course
-    const dates = getScheduleDates(course.schedule)
-
-   return dates.map(d => {
-    const [startTime, endTime] = d.time.split(' to ')
-    const startDateTime = `${d.date}T${convertTo24Hour(startTime)}`
-    const endDateTime = `${d.date}T${convertTo24Hour(endTime)}`
-    const isCompleted = new Date(endDateTime) < new Date()
-    return {
-      title: `${course.name} – ${startTime}`,
-      start: startDateTime,
-      end: endDateTime,
-      extendedProps: { 
-        courseId: course.id,
-        courseName: course.name,
-        scheduleType: d.type,
-        completed: isCompleted // <-- add this
-      }
-    }
+ // build events from sessions (backend data)
+  const sessionEvents = sessions?.flatMap(course => {
+    return course.batches.flatMap(batch => {
+      return batch.classes.map(cls => {
+        const startDateTime = cls.start_time
+        const endDateTime = cls.end_time
+        const isCompleted = new Date(endDateTime) < new Date()
+        return {
+          title: `${course.course_name} (${batch.batch_name})`,
+          start: startDateTime,
+          end: endDateTime,
+          extendedProps: {
+            courseName: course.course_name,
+            batchName: batch.batch_name,
+            sessionId: cls.id,
+            completed: isCompleted,
+            recordingUrl: cls.recording_url
+          }
+        }
+      })
     })
   }) || []
 
+console.log('Session Events:', sessionEvents);
   // filter by selected courses
-  const filteredEvents = courseEvents.filter(
-    event => store.selectedCalendars.includes(event.extendedProps.courseId)
-  )
+const filteredEvents = sessionEvents.filter(
+  event => store.selectedCalendars.includes(event.extendedProps.courseName)
+)
 
-  const eventsToShow = store.selectedCalendars.length > 0 ? filteredEvents : courseEvents
+const eventsToShow = store.selectedCalendars.length > 0 ? filteredEvents : sessionEvents
+
+// console.log('Events to Show:', eventsToShow,filteredEvents);
 
   return (
     <Fragment>
@@ -122,7 +126,7 @@ const CalendarComponent = () => {
               updateFilter={updateFilter}
               toggleSidebar={toggleSidebar}
               updateAllFilters={updateAllFilters}
-              mycourseslist={mycourseslist}
+              sessions={sessions}
             />
           </Col>
           <Col className='position-relative'>
@@ -135,7 +139,7 @@ const CalendarComponent = () => {
               calendarApi={calendarApi}
               toggleSidebar={toggleSidebar}
               setCalendarApi={setCalendarApi}
-              mycourseslist={mycourseslist}
+              sessions={sessions}
             />
           </Col>
           <div

@@ -1,6 +1,6 @@
 // ** React Imports
 import { useState, useEffect } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 
 // ** Store & Actions
 import { useSelector, useDispatch } from 'react-redux'
@@ -42,6 +42,8 @@ import TrialBanner from './components/TrialBanner'
 const VerticalLayout = props => {
   // ** Props
   const { menu, navbar, footer, children, menuData } = props
+  const navigate = useNavigate();
+
 
   // ** Hooks
   const [isRtl, setIsRtl] = useRTL()
@@ -110,21 +112,25 @@ const VerticalLayout = props => {
     dispatch(getProfile());
   }, [] )
 
-  useEffect(() => {
-  if (trialPeriodData && trialPeriodData.is_trial && !trialPeriodData.has_purchased) {
-    const remainingMs = trialPeriodData.remaining_seconds * 1000;
+ useEffect(() => {
+    if (trialPeriodData && trialPeriodData.is_trial && !trialPeriodData.has_purchased) {
+      const remainingMs = trialPeriodData.remaining_seconds * 1000;
 
-    if (remainingMs > 0) {
-      const timer = setTimeout(() => {
-        dispatch(logoutUser()); 
-      }, remainingMs);
+      if (remainingMs > 0) {
+        const timer = setTimeout(() => {
+          dispatch(logoutUser()).then(() => {
+            navigate("/login"); 
+          });
+        }, remainingMs);
 
-      return () => clearTimeout(timer);
-    } else {
-      dispatch(logoutUser());
+        return () => clearTimeout(timer);
+      } else {
+        dispatch(logoutUser()).then(() => {
+          navigate("/login");
+        });
+      }
     }
-  }
-}, [trialPeriodData, dispatch]);
+  }, [trialPeriodData, dispatch, navigate]);
 
 useEffect(() => {
   if (trialPeriodData?.remaining_seconds) {

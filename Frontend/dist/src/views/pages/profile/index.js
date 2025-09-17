@@ -1,8 +1,5 @@
 import { Fragment, useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
-
-
-// Reactstrap Components
 import {
   Row,
   Col,
@@ -22,8 +19,8 @@ import {
   Badge
 } from 'reactstrap';
 
-// Custom Components
 import UILoader from '@components/ui-loader';
+import InputPasswordToggle from '@components/input-password-toggle'
 import Breadcrumbs from '@components/breadcrumbs';
 
 // Icons
@@ -45,10 +42,23 @@ import {
 import { verifyOtp, updatePassword, sendOtp, updateProfile } from '../../../redux/authentication';
 import toast from 'react-hot-toast';
 import "../../../@core/scss/base/pages/app-profile.scss"
+import { Controller, useForm } from 'react-hook-form';
 
 const Profile = () => {
   const dispatch = useDispatch();
   const user = useSelector(state => state.auth.user);
+const {
+  control,
+  handleSubmit,
+  watch,
+  formState: { errors }
+} = useForm({
+  defaultValues: {
+    old_password: "",
+    new_password: "",
+    confirm_password: ""
+  }
+});
 
   // States
   const [editMode, setEditMode] = useState(false);
@@ -142,13 +152,13 @@ const Profile = () => {
     
     let otpValue = value;
     if (type === "phone") {
-      otpValue = `+91${otpValue}`;
+      otpValue = otpValue;
     }
     
     const payload = {
       identifier: otpValue,
       identifier_type: type,
-      purpose: "updateprofile",
+      purpose: "profile_update",
     };
     
     setOtpType(type);
@@ -172,17 +182,17 @@ const Profile = () => {
   const handleVerifyOtp = () => {
     let value = otpValue;
     if (otpType === "phone") {
-      value = `+91${otpValue}`;
+      value = otpValue;
     }
 
     const payload = {
       identifier: value,
-      identifier_type: otpType,
+      // identifier_type: otpType,
       otp_code: otp,
-      purpose: "updateprofile",
+      purpose: "profile_update",
     };
     
-    dispatch(verifyOtp(payload))
+    dispatch(updateProfile(payload))
       .unwrap()
       .then(res => {
         // Show success message from backend
@@ -197,8 +207,6 @@ const Profile = () => {
         setOtpValue("");
         setOtpSentSuccess(false);
         setOtpModal(false);
-        
-        handleProfileUpdate();
       })
       .catch(err => {
         // Show error
@@ -223,7 +231,7 @@ const Profile = () => {
       console.log("photo",photo,"photoPreview",photoPreview)
           // Add profile image if selected
       if (photo) {
-        formDataToSend.append('profile', photoPreview);
+        formDataToSend.append('profile_picture', photoPreview);
       }
       
       // Check if there's any data to update
@@ -250,7 +258,7 @@ const Profile = () => {
   };
 
   // Handle form submit
-  const handleSubmit = async (e) => {
+  const handleSubmit1 = async (e) => {
     e.preventDefault();
     
     // Check if email or phone has changed and needs verification
@@ -271,32 +279,24 @@ const Profile = () => {
   };
 
   // Handle password update
-  const handlePasswordUpdate = async (e) => {
-    e.preventDefault();
-    
-    if (passwordData.new_password !== passwordData.confirm_password) {
-      toast.error('New passwords do not match');
-      return;
-    }
-    
-    setPasswordLoading(true);
-    
-    try {
-      const result = await dispatch(updatePassword(passwordData)).unwrap();
-      
-      toast.success(result.message || 'Password updated successfully!');
-      setShowPasswordUpdate(false);
-      setPasswordData({
-        old_password: '',
-        new_password: '',
-        confirm_password: ''
-      });
-    } catch (error) {
-      toast.error(error.error || 'Failed to update password');
-    } finally {
-      setPasswordLoading(false);
-    }
-  };
+ const handlePasswordUpdate = async (data) => {
+  if (data.new_password !== data.confirm_password) {
+    toast.error("New passwords do not match");
+    return;
+  }
+
+  setPasswordLoading(true);
+
+  try {
+    const result = await dispatch(updatePassword(data)).unwrap();
+    toast.success(result.message || "Password updated successfully!");
+    setShowPasswordUpdate(false);
+  } catch (error) {
+    toast.error(error.message || "Failed to update password");
+  } finally {
+    setPasswordLoading(false);
+  }
+};
 
   // Format date
   const formatDate = (dateString) => {
@@ -446,7 +446,7 @@ const Profile = () => {
                   </div>
                 ) : (
                   // Edit Mode
-                  <Form onSubmit={handleSubmit}>
+                  <Form onSubmit={handleSubmit1}>
                     {/* Upload Photo */}
                     <FormGroup>
                       <Label for="photo">Profile Photo</Label>
@@ -496,16 +496,16 @@ const Profile = () => {
                           value={formData.email}
                           onChange={handleInputChange}
                           placeholder="Enter email address"
-                          disabled={isEmailChanged && !emailVerified}
+                          disabled={emailVerified}
                         />
-                        <Button 
+                        {/* <Button 
                           color="outline-primary" 
                           className="ms-2"
                           onClick={() => handleSendOtp('email', formData.email)}
                           disabled={!isEmailChanged || emailVerified}
                         >
                           {isEmailChanged && !emailVerified ? 'Verify' : 'Update'}
-                        </Button>
+                        </Button> */}
                       </div>
                     </FormGroup>
                     <FormGroup>
@@ -523,13 +523,13 @@ const Profile = () => {
                           value={formData.phone_number}
                           onChange={handleInputChange}
                           placeholder="Enter phone number"
-                          disabled={isPhoneChanged && !phoneVerified}
+                         
                         />
                         <Button 
                           color="outline-primary" 
                           className="ms-2"
                           onClick={() => handleSendOtp('phone', formData.phone_number)}
-                          disabled={!isPhoneChanged || phoneVerified}
+                          disabled={!isPhoneChanged}
                         >
                           {isPhoneChanged && !phoneVerified ? 'Verify' : 'Update'}
                         </Button>
@@ -616,61 +616,73 @@ const Profile = () => {
         <ModalHeader toggle={() => setShowPasswordUpdate(false)}>
           Update Password
         </ModalHeader>
-        <Form onSubmit={handlePasswordUpdate}>
-          <ModalBody>
-            <FormGroup>
-              <Label for="old_password">Current Password</Label>
-              <Input
-                type="password"
-                name="old_password"
-                id="old_password"
-                value={passwordData.old_password}
-                onChange={handlePasswordChange}
-                placeholder="Enter current password"
-                required
-              />
-            </FormGroup>
-            <FormGroup>
-              <Label for="new_password">New Password</Label>
-              <Input
-                type="password"
-                name="new_password"
-                id="new_password"
-                value={passwordData.new_password}
-                onChange={handlePasswordChange}
-                placeholder="Enter new password"
-                required
-              />
-            </FormGroup>
-            <FormGroup>
-              <Label for="confirm_password">Confirm New Password</Label>
-              <Input
-                type="password"
-                name="confirm_password"
-                id="confirm_password"
-                value={passwordData.confirm_password}
-                onChange={handlePasswordChange}
-                placeholder="Confirm new password"
-                required
-              />
-            </FormGroup>
-          </ModalBody>
-          <ModalFooter>
-            <Button color="secondary" onClick={() => setShowPasswordUpdate(false)} disabled={passwordLoading}>
-              Cancel
-            </Button>
-            <Button color="primary" type="submit" disabled={passwordLoading}>
-              {passwordLoading ? (
-                <>
-                  <span className="spinner-border spinner-border-sm me-1" />
-                  Updating...
-                </>
-              ) : (
-                'Update Password'
+       <Form onSubmit={handleSubmit(handlePasswordUpdate)}>
+        <ModalBody>
+          <FormGroup>
+            <Label for="old_password">Current Password</Label>
+            <Controller
+              name="old_password"
+              control={control}
+              rules={{ required: "Old password is required" }}
+              render={({ field }) => (
+                <InputPasswordToggle
+                  className="input-group-merge"
+                  invalid={errors.old_password && true}
+                  {...field}
+                />
               )}
-            </Button>
-          </ModalFooter>
-        </Form>
+            />
+          </FormGroup>
+
+          <FormGroup>
+            <Label for="new_password">New Password</Label>
+            <Controller
+              name="new_password"
+              control={control}
+              rules={{ required: "New password is required" }}
+              render={({ field }) => (
+                <InputPasswordToggle
+                  className="input-group-merge"
+                  invalid={errors.new_password && true}
+                  {...field}
+                />
+              )}
+            />
+          </FormGroup>
+
+          <FormGroup>
+            <Label for="confirm_password">Confirm New Password</Label>
+            <Controller
+              name="confirm_password"
+              control={control}
+              rules={{ required: "Confirm password is required" }}
+              render={({ field }) => (
+                <InputPasswordToggle
+                  className="input-group-merge"
+                  invalid={errors.confirm_password && true}
+                  {...field}
+                />
+              )}
+            />
+          </FormGroup>
+        </ModalBody>
+        <ModalFooter>
+          <Button color="secondary" onClick={() => setShowPasswordUpdate(false)} disabled={passwordLoading}>
+            Cancel
+          </Button>
+          <Button color="primary" type="submit" disabled={passwordLoading}>
+            {passwordLoading ? (
+              <>
+                <span className="spinner-border spinner-border-sm me-1" />
+                Updating...
+              </>
+            ) : (
+              "Update Password"
+            )}
+          </Button>
+        </ModalFooter>
+      </Form>
+
       </Modal>
 
     </Fragment>

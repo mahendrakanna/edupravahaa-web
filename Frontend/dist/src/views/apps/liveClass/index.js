@@ -10,31 +10,34 @@ import ScreenShareIcon from '@mui/icons-material/ScreenShare';
 import StopScreenShareIcon from '@mui/icons-material/StopScreenShare';
 import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
 import CallEndIcon from '@mui/icons-material/CallEnd';
-import PersonIcon from '@mui/icons-material/Person';
 import EmojiEmotionsIcon from '@mui/icons-material/EmojiEmotions';
 import PanToolAltIcon from '@mui/icons-material/PanToolAlt';
 import GroupsIcon from '@mui/icons-material/Groups';
 import { useSelector } from 'react-redux';
 
-const configuration = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+const configuration = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
-// Small helper component to render remote student video and correctly set srcObject
-const StudentVideo = ({ stream }) => {
+const StudentVideo = ({ stream, name }) => {
   const ref = useRef();
   useEffect(() => {
     if (ref.current) {
       ref.current.srcObject = stream || null;
       ref.current.muted = !!(stream && stream.getAudioTracks && stream.getAudioTracks().length === 0);
-      ref.current.play().catch(() => {});
+      ref.current.play().catch((err) => console.error('Video play error:', err));
     }
+    console.log('StudentVideo stream updated for', name, stream);
   }, [stream]);
-  return <video ref={ref} autoPlay playsInline className="student-video" />;
+  return (
+    <div className="student-video-container">
+      <video ref={ref} autoPlay playsInline className="student-video" />
+      <div className="video-label">{name}</div>
+    </div>
+  );
 };
 
 const LiveClassPage = () => {
   const { courseId } = useParams();
-  const { user } = useSelector(state => state.auth);
-  const { token } = useSelector(state => state.auth);
+  const { user, token } = useSelector((state) => state.auth);
   const isTeacher = user?.role === 'teacher';
 
   const ws = useRef(null);
@@ -43,12 +46,11 @@ const LiveClassPage = () => {
   const [joined, setJoined] = useState(false);
   const [localStream, setLocalStream] = useState(null);
   const [screenStream, setScreenStream] = useState(null);
-  const [remoteStreams, setRemoteStreams] = useState({}); // {userId: stream or {camera, screen}}
+  const [remoteStreams, setRemoteStreams] = useState({});
   const [peerConnections, setPeerConnections] = useState({});
   const [videoEnabled, setVideoEnabled] = useState(true);
   const [audioEnabled, setAudioEnabled] = useState(isTeacher);
   const [screenSharing, setScreenSharing] = useState(false);
-  const [teacherScreenSharing, setTeacherScreenSharing] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [participantsOpen, setParticipantsOpen] = useState(false);
   const [messages, setMessages] = useState([]);
@@ -58,6 +60,7 @@ const LiveClassPage = () => {
   const [showEmoji, setShowEmoji] = useState(false);
   const [emoji, setEmoji] = useState('');
   const [handRaised, setHandRaised] = useState(false);
+  const [mediaError, setMediaError] = useState(null);
 
   // Refs
   const localVideoRef = useRef();
@@ -65,38 +68,37 @@ const LiveClassPage = () => {
   const screenShareVideoRef = useRef();
   const meetingTimer = useRef();
 
-  // Preview before joining
   useEffect(() => {
     if (!joined) {
       initializePreview();
     }
     return () => {
-      if (localStream) localStream.getTracks().forEach(track => track.stop());
-      if (screenStream) screenStream.getTracks().forEach(track => track.stop());
+      if (localStream) localStream.getTracks().forEach((track) => track.stop());
+      if (screenStream) screenStream.getTracks().forEach((track) => track.stop());
       if (meetingTimer.current) clearInterval(meetingTimer.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [joined]);
 
-  // Handle screen share video updates (local teacher view)
   useEffect(() => {
     if (screenSharing && screenStream && screenShareVideoRef.current) {
       screenShareVideoRef.current.srcObject = screenStream;
       screenShareVideoRef.current.muted = true;
-      screenShareVideoRef.current.play().catch(() => {});
+      screenShareVideoRef.current.play().catch((err) => console.error('Screen share play error:', err));
     }
   }, [screenSharing, screenStream]);
 
-  // initializePreview & initializeMeetingMedia
   const initializePreview = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: true,
-        audio: true
+        audio: true,
       });
       setLocalStream(stream);
-      if (localVideoRef.current) localVideoRef.current.srcObject = stream;
-
+      setMediaError(null);
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = stream;
+        localVideoRef.current.play().catch((err) => console.error('Local video play error:', err));
+      }
       if (!isTeacher) {
         const audioTrack = stream.getAudioTracks()[0];
         if (audioTrack) {
@@ -105,11 +107,14 @@ const LiveClassPage = () => {
         }
       }
       const videoTrack = stream.getVideoTracks()[0];
-      if (videoTrack) {
-        videoTrack.enabled = videoEnabled;
-      }
+      if (videoTrack) videoTrack.enabled = videoEnabled;
     } catch (error) {
       console.error('Error accessing media devices:', error);
+      if (error.name === 'NotReadableError') {
+        setMediaError('Camera or microphone is in use by another application. Please close other apps or tabs and try again.');
+      } else {
+        setMediaError(`Failed to access camera/microphone: ${error.message}`);
+      }
     }
   };
 
@@ -117,11 +122,14 @@ const LiveClassPage = () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: true,
-        audio: true
+        audio: true,
       });
       setLocalStream(stream);
-      if (localVideoRef.current) localVideoRef.current.srcObject = stream;
-
+      setMediaError(null);
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = stream;
+        localVideoRef.current.play().catch((err) => console.error('Local video play error:', err));
+      }
       if (!isTeacher) {
         const audioTrack = stream.getAudioTracks()[0];
         if (audioTrack) {
@@ -132,41 +140,54 @@ const LiveClassPage = () => {
       startMeetingTimer();
     } catch (error) {
       console.error('Error accessing media devices:', error);
+      if (error.name === 'NotReadableError') {
+        setMediaError('Camera or microphone is in use by another application. Please close other apps or tabs and try again.');
+      } else {
+        setMediaError(`Failed to access camera/microphone: ${error.message}`);
+      }
     }
-  };
+  };  
 
-  // ---------------- WebSocket Setup ----------------
   const connectWebSocket = () => {
-    const wsUrl = `ws://192.168.0.19:8000/ws/class/${encodeURIComponent(7)}/?token=Bearer%20${encodeURIComponent(token)}`;
+    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    const wsUrl = `${protocol}://192.168.0.20:8000/ws/class/${encodeURIComponent(7)}/?token=Bearer%20${encodeURIComponent(token)}`;
+    console.log('Connecting to WebSocket:', wsUrl);
     ws.current = new WebSocket(wsUrl);
 
     ws.current.onopen = () => {
-      ws.current.send(JSON.stringify({ type: "join", userId: user?.id, user: user?.name || "Guest" }));
+      console.log('WebSocket connected');
+      ws.current.send(JSON.stringify({ type: 'join', userId: user?.id, user: user?.name || 'Guest' }));
     };
 
     ws.current.onmessage = (event) => {
       const data = JSON.parse(event.data);
+      console.log('WebSocket message received:', data);
+
 
       switch (data.type) {
-        case "signaling":
+        case 'signaling':
           handleSignaling(data.data, data.sender);
           break;
-        case "chat":
-          setMessages(prev => [...prev, { sender: data.sender, message: data.message, timestamp: new Date().toLocaleTimeString() }]);
+        case 'chat':
+          setMessages((prev) => [
+            ...prev,
+            { sender: data.sender, message: data.message, timestamp: new Date().toLocaleTimeString(), is_emoji: data.is_emoji },
+          ]);
           break;
-        case "participants":
+        case 'participants_message':
+          console.log('Participants updated:', data.participants);
           setParticipants(data.participants);
           break;
-        case "raise-hand":
+        case 'raise-hand':
           if (isTeacher) {
-            setParticipants(prev =>
-              prev.map(p => p.id === data.userId ? { ...p, handRaised: true } : p)
+            setParticipants((prev) =>
+              prev.map((p) => (p.id === data.userId ? { ...p, handRaised: true } : p))
             );
           } else if (data.userId === user.id) {
             setHandRaised(true);
           }
           break;
-        case "unmute":
+        case 'unmute':
           if (!isTeacher && data.userId === user.id) {
             const audioTrack = localStream?.getAudioTracks()[0];
             if (audioTrack) {
@@ -175,97 +196,122 @@ const LiveClassPage = () => {
             }
           }
           if (isTeacher) {
-            setParticipants(prev =>
-              prev.map(p => p.id === data.userId ? { ...p, handRaised: false } : p)
+            setParticipants((prev) =>
+              prev.map((p) => (p.id === data.userId ? { ...p, handRaised: false } : p))
             );
           }
           break;
-        case "screen-share":
-          if (data.userId !== user.id) {
-            setTeacherScreenSharing(data.isSharing);
-          }
+        case 'share':
+          console.log('Screen share update:', data);
+          setParticipants((prev) =>
+            prev.map((p) => (p.id === data.userId ? { ...p, isSharing: data.isSharing } : p))
+          );
           break;
         default:
           break;
       }
     };
 
-    ws.current.onclose = () => {};
+    ws.current.onclose = () => {
+      console.log('WebSocket closed');
+    };
+
+    ws.current.onerror = (err) => {
+      console.error('WebSocket error:', err);
+    };
   };
 
-  // ---------------- WebRTC Signaling ----------------
   const createPeerConnection = (otherId) => {
+    console.log('Creating peer connection for:', otherId);
     const pc = new RTCPeerConnection(configuration);
+    pc.__remoteUserId = otherId;
 
     pc.onicecandidate = (event) => {
       if (event.candidate) {
-        ws.current?.send(JSON.stringify({
-          type: "signaling",
-          data: { type: "candidate", candidate: event.candidate },
-          target: otherId
-        }));
+        console.log('Sending ICE candidate to:', otherId);
+        ws.current?.send(
+          JSON.stringify({
+            type: 'signaling',
+            data: { type: 'candidate', candidate: event.candidate },
+            target: otherId,
+          })
+        );
       }
     };
 
     pc.ontrack = (event) => {
       const [stream] = event.streams;
-      setRemoteStreams(prev => {
-        const updated = { ...prev };
-        const teacher = participants.find(p => p.role === 'teacher');
-        const teacherId = teacher?.id;
-        if (parseInt(otherId) === teacherId) {
-          if (!updated[teacherId]) updated[teacherId] = {};
-          if (event.track.kind === "video") {
-            if (event.track.label.toLowerCase().includes("screen")) {
-              updated[teacherId].screen = stream;
-            } else {
-              updated[teacherId].camera = stream;
-            }
-          }
-        } else {
-          updated[otherId] = stream;
+      const remoteUserId = pc.__remoteUserId;
+
+      setRemoteStreams((prev) => {
+        const existing = prev[remoteUserId] || {};
+        if (event.track.kind === 'video') {
+          const isScreen =
+            (event.track.label && event.track.label.toLowerCase().includes('screen')) ||
+            event.track.contentHint === 'screen';
+          console.log(`Received ${isScreen ? 'screen' : 'camera'} video track from user:`, remoteUserId);
+          return {
+            ...prev,
+            [remoteUserId]: {
+              ...existing,
+              [isScreen ? 'screen' : 'camera']: stream,
+            },
+          };
         }
-        return updated;
+        if (event.track.kind === 'audio') {
+          return {
+            ...prev,
+            [remoteUserId]: {
+              ...existing,
+              audio: stream,
+            },
+          };
+        }
+        return prev;
       });
     };
 
     if (localStream) {
-      localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+      localStream.getTracks().forEach((track) => {
+        console.log('Adding track to peer connection:', track.kind, 'for:', otherId);
+        pc.addTrack(track, localStream);
+      });
     }
 
-    setPeerConnections(prev => ({ ...prev, [otherId]: pc }));
+    setPeerConnections((prev) => ({ ...prev, [otherId]: pc }));
     return pc;
   };
 
-  const shouldInitiate = (myId, otherId) => {
-    return myId > otherId;
-  };
+  const shouldInitiate = (myId, otherId) => myId > otherId;
 
   useEffect(() => {
     if (joined && localStream) {
-      participants.forEach(p => {
+      participants.forEach((p) => {
         if (p.id !== user.id && !peerConnections[p.id]) {
           const pc = createPeerConnection(p.id);
           if (shouldInitiate(user.id, p.id)) {
+            console.log('Initiating offer to:', p.id);
             pc.createOffer()
-              .then(offer => pc.setLocalDescription(offer))
+              .then((offer) => pc.setLocalDescription(offer))
               .then(() => {
-                ws.current?.send(JSON.stringify({
-                  type: "signaling",
-                  data: { type: "offer", offer: pc.localDescription },
-                  target: p.id
-                }));
+                ws.current?.send(
+                  JSON.stringify({
+                    type: 'signaling',
+                    data: { type: 'offer', offer: pc.localDescription },
+                    target: p.id,
+                  })
+                );
               })
-              .catch(err => {});
+              .catch((err) => console.error('Error creating offer:', err));
           }
         }
       });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [participants, joined, localStream]);
+  }, [participants, joined, localStream, user.id]);
 
   const handleSignaling = async (innerData, sender) => {
     sender = parseInt(sender);
+    console.log('Handling signaling from:', sender, 'type:', innerData.type);
     let pc = peerConnections[sender];
     if (!pc) {
       pc = createPeerConnection(sender);
@@ -273,24 +319,28 @@ const LiveClassPage = () => {
 
     try {
       switch (innerData.type) {
-        case "offer":
-          await pc.setRemoteDescription(new window.RTCSessionDescription(innerData.offer));
+        case 'offer':
+          await pc.setRemoteDescription(new RTCSessionDescription(innerData.offer));
           const answer = await pc.createAnswer();
           await pc.setLocalDescription(answer);
-          ws.current?.send(JSON.stringify({
-            type: "signaling",
-            data: { type: "answer", answer: pc.localDescription },
-            target: sender
-          }));
+          ws.current?.send(
+            JSON.stringify({
+              type: 'signaling',
+              data: { type: 'answer', answer: pc.localDescription },
+              target: sender,
+            })
+          );
           if (pc.pendingCandidates && pc.remoteDescription) processPendingCandidates(pc, sender);
           break;
-        case "answer":
-          await pc.setRemoteDescription(new window.RTCSessionDescription(innerData.answer));
+        case 'answer':
+          await pc.setRemoteDescription(new RTCSessionDescription(innerData.answer));
           if (pc.pendingCandidates && pc.remoteDescription) processPendingCandidates(pc, sender);
           break;
-        case "candidate":
+        case 'candidate':
           if (pc.remoteDescription) {
-            await pc.addIceCandidate(new window.RTCIceCandidate(innerData.candidate)).catch(() => {});
+            await pc.addIceCandidate(new RTCIceCandidate(innerData.candidate)).catch((err) =>
+              console.error('Error adding ICE candidate:', err)
+            );
           } else {
             pc.pendingCandidates = pc.pendingCandidates || [];
             pc.pendingCandidates.push(innerData.candidate);
@@ -299,19 +349,22 @@ const LiveClassPage = () => {
         default:
           break;
       }
-    } catch (err) {}
+    } catch (err) {
+      console.error('Signaling error:', err);
+    }
   };
 
   const processPendingCandidates = (pc, sender) => {
     if (pc.pendingCandidates && pc.remoteDescription) {
-      pc.pendingCandidates.forEach(candidate => {
-        pc.addIceCandidate(new window.RTCIceCandidate(candidate)).catch(() => {});
+      pc.pendingCandidates.forEach((candidate) => {
+        pc.addIceCandidate(new RTCIceCandidate(candidate)).catch((err) =>
+          console.error('Error processing pending candidate:', err)
+        );
       });
       delete pc.pendingCandidates;
     }
   };
 
-  // ---------------- Meeting Controls ----------------
   const startMeetingTimer = () => {
     let startTime = Date.now();
     meetingTimer.current = setInterval(() => {
@@ -343,116 +396,108 @@ const LiveClassPage = () => {
     }
   };
 
-  // MAIN fix: Always renegotiate all PCs when teacher starts/stops screen share
-  const toggleScreenShare = async () => {
-    if (!isTeacher) return;
+ const toggleScreenShare = async () => {
 
-    if (!screenSharing) {
-      try {
-        const newScreenStream = await navigator.mediaDevices.getDisplayMedia({
-          video: { cursor: "always" },
-          audio: false,
-        });
-        setScreenStream(newScreenStream);
+  if (!screenSharing) {
+    try {
+      const newScreenStream = await navigator.mediaDevices.getDisplayMedia({
+        video: { cursor: 'always' },
+        audio: false,
+      });
+      setScreenStream(newScreenStream);
+      const screenTrack = newScreenStream.getVideoTracks()[0];
 
-        const videoTrack = newScreenStream.getVideoTracks()[0];
-        await Promise.all(Object.entries(peerConnections).map(async ([otherId, pc]) => {
-          const sender = pc.getSenders().find(s => s.track?.kind === "video");
-          if (sender) {
-            await sender.replaceTrack(videoTrack).catch(() => {});
-          } else {
-            try {
-              pc.addTrack(videoTrack, newScreenStream);
-            } catch (e) {}
+      await Promise.all(
+        Object.entries(peerConnections).map(async ([otherId, pc]) => {
+          try {
+            pc.getSenders()
+              .filter((s) => s.track && s.track.kind === 'video')
+              .forEach((sender) => pc.removeTrack(sender));
+            pc.addTrack(screenTrack, newScreenStream);
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            ws.current?.send(JSON.stringify({
+              type: 'signaling',
+              data: { type: 'offer', offer: pc.localDescription },
+              target: otherId,
+            }));
+          } catch (err) {
+            console.error('Error adding screen track for', otherId, err);
           }
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-          ws.current?.send(JSON.stringify({
-            type: "signaling",
-            data: { type: "offer", offer: pc.localDescription },
-            target: otherId
-          }));
-        }));
+        })
+      );
 
-        if (screenShareVideoRef.current) {
-          screenShareVideoRef.current.srcObject = newScreenStream;
-          screenShareVideoRef.current.muted = true;
-          screenShareVideoRef.current.play().catch(() => {});
-        }
+      setScreenSharing(true);
+      ws.current?.send(JSON.stringify({
+        type: 'share',
+        userId: user.id,
+        isSharing: true,
+      }));
 
-        setScreenSharing(true);
-        setTeacherScreenSharing(true);
-        ws.current?.send(JSON.stringify({
-          type: "screen-share",
-          userId: user.id,
-          isSharing: true
-        }));
-
-        videoTrack.onended = () => toggleScreenShare();
-      } catch (error) {}
-    } else {
-      try {
-        if (screenStream) {
-          screenStream.getTracks().forEach(t => t.stop());
-          setScreenStream(null);
-        }
-
-        const cameraStream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: isTeacher,
-        });
-
-        const cameraTrack = cameraStream.getVideoTracks()[0];
-        await Promise.all(Object.entries(peerConnections).map(async ([otherId, pc]) => {
-          const sender = pc.getSenders().find(s => s.track?.kind === "video");
-          if (sender) {
-            await sender.replaceTrack(cameraTrack).catch(() => {});
-          } else {
-            try {
-              pc.addTrack(cameraTrack, cameraStream);
-            } catch (e) {}
-          }
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-          ws.current?.send(JSON.stringify({
-            type: "signaling",
-            data: { type: "offer", offer: pc.localDescription },
-            target: otherId
-          }));
-        }));
-
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = cameraStream;
-        }
-        setLocalStream(cameraStream);
-
-        setScreenSharing(false);
-        setTeacherScreenSharing(false);
-        ws.current?.send(JSON.stringify({
-          type: "screen-share",
-          userId: user.id,
-          isSharing: false
-        }));
-      } catch (error) {}
+      screenTrack.onended = () => toggleScreenShare();
+    } catch (err) {
+      console.error('Screen share initiation error:', err);
+      setMediaError('Failed to start screen share. Please try again.');
     }
-  };
+  } else {
+    try {
+      await Promise.all(
+        Object.entries(peerConnections).map(async ([otherId, pc]) => {
+          try {
+            pc.getSenders()
+              .filter((s) => s.track && s.track.kind === 'video')
+              .forEach((sender) => pc.removeTrack(sender));
+            if (localStream) {
+              const cameraTrack = localStream.getVideoTracks()[0];
+              if (cameraTrack) {
+                pc.addTrack(cameraTrack, localStream);
+              }
+            }
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            ws.current?.send(JSON.stringify({
+              type: 'signaling',
+              data: { type: 'offer', offer: pc.localDescription },
+              target: otherId,
+            }));
+          } catch (err) {
+            console.error('Error restoring camera track for', otherId, err);
+          }
+        })
+      );
 
-  // ---------------- Chat ----------------
+      if (screenStream) {
+        screenStream.getTracks().forEach((t) => t.stop());
+        setScreenStream(null);
+      }
+
+      setScreenSharing(false);
+      ws.current?.send(JSON.stringify({
+        type: 'share',
+        userId: user.id,
+        isSharing: false,
+      }));
+    } catch (err) {
+      console.error('Screen share stop error:', err);
+      setMediaError('Failed to stop screen share. Please try again.');
+    }
+  }
+};
+
   const sendMessage = () => {
     if (messageInput.trim()) {
       const newMessage = {
         id: Date.now(),
         message: messageInput,
         sender: user?.name || 'You',
-        timestamp: new Date().toLocaleTimeString()
+        timestamp: new Date().toLocaleTimeString(),
       };
       setMessages([...messages, newMessage]);
-      ws.current?.send(JSON.stringify({ type: "chat", message: messageInput }));
+      ws.current?.send(JSON.stringify({ type: 'chat', message: messageInput }));
       setMessageInput('');
     }
   };
 
-  // ---------------- Meeting Join/Leave ----------------
   const joinMeeting = () => {
     setJoined(true);
     connectWebSocket();
@@ -460,72 +505,76 @@ const LiveClassPage = () => {
   };
 
   const leaveCall = () => {
-    if (localStream) localStream.getTracks().forEach(track => track.stop());
-    if (screenStream) screenStream.getTracks().forEach(track => track.stop());
+    if (localStream) localStream.getTracks().forEach((track) => track.stop());
+    if (screenStream) screenStream.getTracks().forEach((track) => track.stop());
     if (meetingTimer.current) clearInterval(meetingTimer.current);
-    Object.values(peerConnections).forEach(pc => pc.close());
-    if (ws.current) { ws.current.close(); ws.current = null; }
+    Object.values(peerConnections).forEach((pc) => pc.close());
+    if (ws.current) {
+      ws.current.close();
+      ws.current = null;
+    }
     setJoined(false);
     setScreenSharing(false);
-    setTeacherScreenSharing(false);
     setHandRaised(false);
     setShowEmoji(false);
     setEmoji('');
     setPeerConnections({});
     setRemoteStreams({});
     setParticipants([]);
+    setMediaError(null);
   };
 
   const handleRaiseHand = () => {
-    ws.current?.send(JSON.stringify({ type: "raise-hand", userId: user.id }));
+    ws.current?.send(JSON.stringify({ type: 'raise-hand', userId: user.id }));
   };
 
   const unmuteStudent = (studentId) => {
-    ws.current?.send(JSON.stringify({ type: "unmute", userId: studentId }));
+    ws.current?.send(JSON.stringify({ type: 'unmute', userId: studentId }));
   };
 
   const handleEmoji = (emojiVal) => {
     setShowEmoji(true);
     setEmoji(emojiVal);
-    setTimeout(() => { setShowEmoji(false); setEmoji(''); }, 2000);
+    ws.current?.send(JSON.stringify({ type: 'emoji', emoji: emojiVal }));
+    setTimeout(() => {
+      setShowEmoji(false);
+      setEmoji('');
+    }, 2000);
   };
 
-  // UI Logic for Videos
-  const teacher = participants.find(p => p.role === 'teacher');
+  const teacher = participants.find((p) => p.role === 'teacher');
   const teacherId = teacher?.id;
+  const teacherSharing = teacher?.isSharing || false;
 
   let mainStream;
+  let mainName = '';
   if (isTeacher) {
     mainStream = screenSharing && screenStream ? screenStream : localStream;
+    mainName = 'You (Teacher)';
   } else if (teacherId && remoteStreams[teacherId]) {
-    if (teacherScreenSharing && remoteStreams[teacherId].screen) {
-      mainStream = remoteStreams[teacherId].screen;
-    } else if (remoteStreams[teacherId].camera) {
-      mainStream = remoteStreams[teacherId].camera;
-    } else {
-      mainStream = null;
-    }
+    mainStream = teacherSharing && remoteStreams[teacherId].screen ? remoteStreams[teacherId].screen : remoteStreams[teacherId].camera;
+    mainName = `Teacher: ${teacher.name}`;
   } else {
     mainStream = null;
+    mainName = '';
   }
 
-  const studentStreams = Object.entries(remoteStreams).filter(
-    ([id]) => parseInt(id) !== user.id && parseInt(id) !== teacherId
-  );
+  const studentStreams = participants
+    .filter((p) => p.id !== user.id && p.id !== teacherId)
+    .map((p) => ({ id: p.id, name: p.name, isSharing: !!p.isSharing }));
 
-  // Set main video srcObject when mainStream changes
   useEffect(() => {
     if (mainVideoRef.current) {
       if (mainStream) {
+        console.log('Setting main video stream:', mainStream);
         mainVideoRef.current.srcObject = mainStream;
-        mainVideoRef.current.play().catch(() => {});
+        mainVideoRef.current.play().catch((err) => console.error('Main video play error:', err));
       } else {
         mainVideoRef.current.srcObject = null;
       }
     }
   }, [mainStream]);
-
-  // ---------------- UI ----------------
+console.log("participants",participants);
   if (!joined) {
     return (
       <div className="prejoin-container">
@@ -534,6 +583,7 @@ const LiveClassPage = () => {
           <div className="meeting-info">
             <h2>{user?.name}</h2>
             <p>Do you want people to see and hear you in the meeting?</p>
+            {mediaError && <p className="error-message" style={{ color: 'red' }}>{mediaError}</p>}
           </div>
         </div>
         <div className="video-preview">
@@ -552,16 +602,17 @@ const LiveClassPage = () => {
           )}
         </div>
         <div className="join-actions">
-          <button onClick={joinMeeting} className="join-button">Join now</button>
+          <button onClick={joinMeeting} className="join-button">
+            Join now
+          </button>
           <div className="meeting-id">Meeting ID: {courseId}</div>
         </div>
       </div>
     );
   }
-
+  console.log('Rendering main meeting UI', studentStreams, remoteStreams);
   return (
     <div className="meeting-container">
-      {/* Header */}
       <div className="meeting-header">
         <div className="meeting-info-header">
           <span className="meeting-time">{meetingTime}</span>
@@ -569,88 +620,113 @@ const LiveClassPage = () => {
           <span className="user-role">({user?.role})</span>
         </div>
         <div className="meeting-title">{user?.name} (You, {screenSharing ? 'presenting' : 'joined'})</div>
+        {mediaError && <p className="error-message" style={{ color: 'red' }}>{mediaError}</p>}
       </div>
 
-      {/* Video Area */}
       <div className="video-container">
         <div className="remote-video">
-          {isTeacher && screenSharing && screenStream ? (
-            <video
-              ref={screenShareVideoRef}
-              autoPlay
-              muted
-              className="main-video"
-            ></video>
-          ) : (
-            <video
-              ref={mainVideoRef}
-              autoPlay
-              playsInline
-              muted={isTeacher}
-              className="main-video"
-            />
-          )}
+          {/* {screenSharing && screenStream && isTeacher ? ( */}
+            <div className="main-video-container">
+              <video ref={screenShareVideoRef} autoPlay muted className="main-video"></video>
+              <div className="video-label">{mainName}</div>
+            </div>
+          {/* ) */}
+            {/* //  : (
+            //   <div className="main-video-container">
+            //     <video ref={mainVideoRef} autoPlay playsInline muted={isTeacher} className="main-video" />
+            //     <div className="video-label">{mainName}</div>
+            //   </div>
+            // )} */}
         </div>
 
-        {/* Student video strip (grid-like scroll) */}
         {studentStreams.length > 0 && (
           <div className="student-videos-scroll">
-            {studentStreams.map(([id, stream]) => (
-              <StudentVideo key={id} stream={stream} />
-            ))}
+            {studentStreams.map(({ id, name, isSharing }) => {
+              const userStreams = remoteStreams[id] || {};
+              const stream = isSharing && userStreams.screen ? userStreams.screen : userStreams.camera;
+              return <StudentVideo key={id} stream={stream} name={name} />;
+            })}
           </div>
         )}
 
-        {/* Local video thumbnail (always camera) */}
         <div className="local-video">
           <video ref={localVideoRef} autoPlay muted className="thumbnail-video"></video>
+          <div className="video-label">You</div>
           {showEmoji && <div className="emoji-overlay">{emoji}</div>}
           {handRaised && <PanToolAltIcon className="hand-raised-icon" />}
         </div>
       </div>
 
-      {/* Controls */}
       <div className="meeting-controls">
         {isTeacher ? (
           <>
-            <button onClick={toggleAudio} className="control-button">{audioEnabled ? <MicIcon /> : <MicOffIcon />}</button>
-            <button onClick={toggleVideo} className="control-button">{videoEnabled ? <VideocamIcon /> : <VideocamOffIcon />}</button>
-            <button onClick={toggleScreenShare} className="control-button">{screenSharing ? <StopScreenShareIcon /> : <ScreenShareIcon />}</button>
+            <button onClick={toggleAudio} className="control-button">
+              {audioEnabled ? <MicIcon /> : <MicOffIcon />}
+            </button>
+            <button onClick={toggleVideo} className="control-button">
+              {videoEnabled ? <VideocamIcon /> : <VideocamOffIcon />}
+            </button>
+            <button onClick={toggleScreenShare} className="control-button">
+              {screenSharing ? <StopScreenShareIcon /> : <ScreenShareIcon />}
+            </button>
           </>
         ) : (
           <>
-            <button className="control-button disabled"><MicOffIcon /><span>Muted</span></button>
-            <button onClick={toggleVideo} className="control-button">{videoEnabled ? <VideocamIcon /> : <VideocamOffIcon />}</button>
+            <button className="control-button disabled">
+              <MicOffIcon />
+              <span>Muted</span>
+            </button>
+            <button onClick={toggleVideo} className="control-button">
+              {videoEnabled ? <VideocamIcon /> : <VideocamOffIcon />}
+            </button>
+            <button onClick={toggleScreenShare} className="control-button">
+              {screenSharing ? <StopScreenShareIcon /> : <ScreenShareIcon />}
+            </button>
           </>
         )}
 
-        <button onClick={() => setChatOpen(!chatOpen)} className="control-button"><ChatBubbleOutlineIcon /></button>
-        {!isTeacher && <button onClick={handleRaiseHand} className="control-button"><PanToolAltIcon /></button>}
-        <button onClick={() => handleEmoji('👍')} className="control-button"><EmojiEmotionsIcon /></button>
-        <button onClick={() => handleEmoji('👏')} className="control-button"><EmojiEmotionsIcon /></button>
-        <button onClick={() => setParticipantsOpen(!participantsOpen)} className="control-button"><GroupsIcon /></button>
-        <button onClick={leaveCall} className="control-button leave-button"><CallEndIcon /><span>Leave</span></button>
+        <button onClick={() => setChatOpen(!chatOpen)} className="control-button">
+          <ChatBubbleOutlineIcon />
+        </button>
+        {!isTeacher && (
+          <button onClick={handleRaiseHand} className="control-button">
+            <PanToolAltIcon />
+          </button>
+        )}
+        <button onClick={() => handleEmoji('👍')} className="control-button">
+          <EmojiEmotionsIcon />
+        </button>
+        <button onClick={() => handleEmoji('👏')} className="control-button">
+          <EmojiEmotionsIcon />
+        </button>
+        <button onClick={() => setParticipantsOpen(!participantsOpen)} className="control-button">
+          <GroupsIcon />
+        </button>
+        <button onClick={leaveCall} className="control-button leave-button">
+          <CallEndIcon />
+          <span>Leave</span>
+        </button>
       </div>
 
-      {/* Participants info (count) */}
       <div className="participants-info">
-        <GroupsIcon /><span>Participants: {participants.length}</span>
+        <GroupsIcon />
+        <span>Participants: {participants.length}</span>
       </div>
 
-      {/* Raised hands panel for teacher */}
-      {isTeacher && participants.some(p => p.handRaised) && (
+      {isTeacher && participants.some((p) => p.handRaised) && (
         <div className="raised-hands-panel">
           <h4>Raised Hands</h4>
-          {participants.filter(p => p.handRaised).map(p => (
-            <div key={p.id} className="student-box">
-              <span>{p.name}</span>
-              <button onClick={() => unmuteStudent(p.id)}>Unmute</button>
-            </div>
-          ))}
+          {participants
+            .filter((p) => p.handRaised)
+            .map((p) => (
+              <div key={p.id} className="student-box">
+                <span>{p.name}</span>
+                <button onClick={() => unmuteStudent(p.id)}>Unmute</button>
+              </div>
+            ))}
         </div>
       )}
 
-      {/* Chat */}
       {chatOpen && (
         <div className="chat-sidebar">
           <div className="chat-header">
@@ -659,17 +735,23 @@ const LiveClassPage = () => {
           </div>
           <div className="chat-messages">
             {messages.map((m, i) => (
-              <div key={i} className="message"><b>{m.sender}</b>: {m.message} <small>{m.timestamp}</small></div>
+              <div key={i} className="message">
+                <b>{m.sender}</b>: {m.message} <small>{m.timestamp}</small>
+              </div>
             ))}
           </div>
           <div className="chat-input-container">
-            <input type="text" value={messageInput} onChange={(e) => setMessageInput(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && sendMessage()} />
+            <input
+              type="text"
+              value={messageInput}
+              onChange={(e) => setMessageInput(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+            />
             <button onClick={sendMessage}>↑</button>
           </div>
         </div>
       )}
 
-      {/* Participants sidebar */}
       {participantsOpen && (
         <div className="participants-sidebar">
           <div className="participants-header">
@@ -679,7 +761,7 @@ const LiveClassPage = () => {
           <div className="participants-list">
             {participants.map((p, i) => (
               <div key={i} className="participant-item">
-                <b>{p.name}</b> ({p.role}) {p.handRaised && <PanToolAltIcon />}
+                <b>{p.name}jjj</b> ({p.role}) {p.handRaised && <PanToolAltIcon />} {p.isSharing && '(sharing)'}
               </div>
             ))}
           </div>

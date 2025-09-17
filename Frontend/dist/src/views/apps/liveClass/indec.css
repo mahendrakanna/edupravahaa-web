@@ -513,3 +513,12 @@ body {
     padding: 8px 0;
   }
 }
+.student-video{
+  width: 200px;
+  height: 150px;
+  background: #222;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.10);
+  margin-top: 8px;
+}

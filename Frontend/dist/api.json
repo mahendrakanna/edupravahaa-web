@@ -7,7 +7,7 @@
         "forgotPassword": "/api/auth/forgot-password/",
         "getProfile": "/api/auth/profile/",
         "logout": "/api/auth/logout/",
-        "refreshToken": "/api/auth/refresh-token/",
+        "refreshToken": "/api/auth/token/refresh/",
         "updatePassword": "/api/auth/change-password/"
     },
     "student": {
@@ -17,6 +17,9 @@
         "courses": "/api/courses/",
         "mycourses": "/api/courses/my_courses/"
     },
+    "classes": {
+    "sessions": "/api/classes/sessions/"
+  },
     "payments": {
         "createOrder": "/api/payments/create_order/",
         "verifyPayment": "/api/payments/verify_payment/"

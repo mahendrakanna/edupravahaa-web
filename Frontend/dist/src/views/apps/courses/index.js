@@ -12,7 +12,7 @@ const Courses = () => {
   }, [dispatch])
 
   return (
-    <Container fluid className="bg-white py-2 rounded shadow-sm">
+<Container fluid className="my-courses-container py-2 rounded shadow-sm">
       <h2 className="mb-2 text-center">Our Courses</h2>
 
       {loading && (
