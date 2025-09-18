@@ -1,4 +1,5 @@
 from rest_framework import status
+from rest_framework import serializers
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -286,11 +287,11 @@ class ClassScheduleView(APIView):
                 )
             ),
             400: openapi.Response(
-                description="Invalid input or conflict",
+                description="Invalid input or scheduling conflict",
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'message': openapi.Schema(type=openapi.TYPE_STRING, description="Error message"),
+                        'message': openapi.Schema(type=openapi.TYPE_STRING, description="Error message, e.g., 'Teacher has a conflicting session on 2025-09-01 from 09:00 AM to 10:00 AM.'"),
                         'message_type': openapi.Schema(type=openapi.TYPE_STRING, enum=['success', 'error'], description="Type of message")
                     }
                 )
@@ -360,6 +361,13 @@ class ClassScheduleView(APIView):
                     data=ClassScheduleSerializer(result).data,
                     status_code=status.HTTP_201_CREATED
                 )
+        except serializers.ValidationError as e:
+            error_response = get_serializer_error_message(e.detail)
+            return api_response(
+                message=error_response['message'],
+                message_type='error',
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
         except Exception as e:
             logger.error(f"Error creating class schedule: {str(e)}")
             return api_response(
@@ -421,11 +429,11 @@ class ClassScheduleView(APIView):
                 )
             ),
             400: openapi.Response(
-                description="Invalid input",
+                description="Invalid input or scheduling conflict",
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'message': openapi.Schema(type=openapi.TYPE_STRING, description="Error message"),
+                        'message': openapi.Schema(type=openapi.TYPE_STRING, description="Error message, e.g., 'Teacher has a conflicting session on 2025-09-01 from 09:00 AM to 10:00 AM.'"),
                         'message_type': openapi.Schema(type=openapi.TYPE_STRING, enum=['success', 'error'], description="Type of message")
                     }
                 )
@@ -663,7 +671,7 @@ class ClassSessionUpdateView(APIView):
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'message': openapi.Schema(type=openapi.TYPE_STRING, description="Error message"),
+                        'message': openapi.Schema(type=openapi.TYPE_STRING, description="Error message, e.g., 'Teacher has a conflicting session on 2025-09-01 from 09:00 AM to 10:00 AM.'"),
                         'message_type': openapi.Schema(type=openapi.TYPE_STRING, enum=['success', 'error'], description="Type of message")
                     }
                 )
