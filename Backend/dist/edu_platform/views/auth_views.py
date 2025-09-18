@@ -484,8 +484,6 @@ class LoginView(generics.GenericAPIView):
             refresh = RefreshToken.for_user(user)
             
             data = {
-                'message':'Login successful.',
-                'message_type':'success',
                 'access': str(refresh.access_token),
                 'refresh': str(refresh),
                 'user_type': user.role
@@ -499,8 +497,13 @@ class LoginView(generics.GenericAPIView):
                     data['trial_ends_at'] = user.trial_end_date.isoformat()
                     data['trial_remaining_seconds'] = user.trial_remaining_seconds
 
-            return Response(data, status=status.HTTP_200_OK)
-
+            return api_response(
+                message='Login successful.',
+                message_type='success',
+                data=data,
+                status_code=status.HTTP_200_OK
+            )
+        
         except Exception as e:
             # Log and handle unexpected errors
             logger.error(f"Login error: {str(e)}")
@@ -1170,7 +1173,6 @@ class ListStudentsView(generics.ListAPIView):
             )
 
 class TrialStatusView(generics.GenericAPIView):
-    """Retrieves trial status for authenticated student users."""
     permission_classes = [IsAuthenticated, IsStudent]
     
     @swagger_auto_schema(
@@ -1183,21 +1185,15 @@ class TrialStatusView(generics.GenericAPIView):
                     properties={
                         'message': openapi.Schema(type=openapi.TYPE_STRING),
                         'message_type': openapi.Schema(type=openapi.TYPE_STRING, enum=['success', 'error']),
-                        'is_trial': openapi.Schema(type=openapi.TYPE_BOOLEAN),
-                        'has_purchased': openapi.Schema(type=openapi.TYPE_BOOLEAN),
-                        'purchased_courses_count': openapi.Schema(type=openapi.TYPE_INTEGER),
-                        'trial_ends_at': openapi.Schema(type=openapi.TYPE_STRING, format='date-time'),
-                        'remaining_seconds': openapi.Schema(type=openapi.TYPE_INTEGER)
-                    }
-                )
-            ),
-            403: openapi.Response(
-                description="Unauthorized",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        'error': openapi.Schema(type=openapi.TYPE_STRING),
-                        'status': openapi.Schema(type=openapi.TYPE_INTEGER, description="HTTP status code")
+                        'data': openapi.Schema(
+                            type=openapi.TYPE_OBJECT,
+                            properties={
+                                'is_trial': openapi.Schema(type=openapi.TYPE_BOOLEAN),
+                                'trial_ends_at': openapi.Schema(type=openapi.TYPE_STRING, format='date-time'),
+                                'trial_remaining_seconds': openapi.Schema(type=openapi.TYPE_INTEGER),
+                                'has_purchased': openapi.Schema(type=openapi.TYPE_BOOLEAN)
+                            }
+                        )
                     }
                 )
             ),
@@ -1227,19 +1223,21 @@ class TrialStatusView(generics.GenericAPIView):
                 payment_status='completed'
             ).count()
 
-            response_data = {
-                'message': 'Trial status retrieved successfully.',
-                'message_type': 'success',
+            data = {
                 'is_trial': not user.has_purchased_courses,
                 'has_purchased': user.has_purchased_courses,
-                'purchased_courses_count': purchased_count
+                'purchased_count': purchased_count
             }
             
             if not user.has_purchased_courses and user.trial_end_date:
-                response_data['trial_ends_at'] = user.trial_end_date.isoformat()
-                response_data['remaining_seconds'] = user.trial_remaining_seconds
-            
-            return Response(response_data, status=status.HTTP_200_OK)
+                data['trial_ends_at'] = user.trial_end_date.isoformat()
+                data['trial_remaining_seconds'] = user.trial_remaining_seconds
+            return api_response(
+                message='Trial status retrieved successfully.',
+                message_type='success',
+                data=data,
+                status_code=status.HTTP_200_OK
+            )
         except Exception as e:
             logger.error(f"Trial status error for user {user.id}: {str(e)}")
             return api_response(

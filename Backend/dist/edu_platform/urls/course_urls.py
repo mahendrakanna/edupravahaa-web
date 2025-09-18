@@ -11,11 +11,11 @@ urlpatterns = [
     
     # Admin-only endpoint to create and update a new course
     path('admin/create/course/', AdminCourseCreateView.as_view(), name='admin_course_create'),
-    path('admin/update/<int:id>/', AdminCourseUpdateView.as_view(), name='admin_course_update'),
+    # path('admin/update/<int:id>/', AdminCourseUpdateView.as_view(), name='admin_course_update'),
     
     # Lists purchased courses for the authenticated student
     path('my_courses/', MyCoursesView.as_view(), name='my_courses'),
     
     # Update batch for a subscribed course
-    path('enrollment/<int:subscription_id>/', UpdateEnrollmentView.as_view(), name='update_enrollment'),
+    # path('enrollment/<int:subscription_id>/', UpdateEnrollmentView.as_view(), name='update_enrollment'),
 ]
