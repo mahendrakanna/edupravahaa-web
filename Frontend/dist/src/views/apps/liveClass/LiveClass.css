@@ -91,10 +91,10 @@
 
 .video-box {
   position: relative;
-  background: #111;
+  background: transparent;
   border-radius: 8px;
   overflow: hidden;
-  aspect-ratio: 16 / 9;
+  /* aspect-ratio: 16 / 10; */
 }
 
 .video-element {
@@ -224,8 +224,8 @@
 .chat-message .message-content {
   padding: 4px 8px; /* Reduced padding */
   border-radius: 12px; /* Reduced radius */
-  background: #f1f3f4;
-  color: #202124;
+  /* background: #f1f3f4; */
+  color: white;
   font-size: 12px; /* Reduced font size */
 }
 
@@ -240,9 +240,9 @@
   align-self: flex-end;
 }
 
-.chat-message.mine .message-content {
+/* .chat-message.mine .message-content {
   background: #d2e3fc;
-}
+} */
 
 .chat-input {
   display: flex;
@@ -796,14 +796,14 @@
 }
 
 /* Video Box */
-.video-box {
+/* .video-box {
   position: relative;
   background: #1a1a2e;
   border-radius: 16px;
   overflow: hidden;
   transition: all 0.3s ease;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-}
+} */
 
 .video-box:hover {
   transform: translateY(-2px);
@@ -1628,7 +1628,8 @@ input:focus-visible {
           background: #000;
           border-radius: 12px;
           overflow: hidden;
-          aspect-ratio: 16 / 9;
+
+          /* aspect-ratio: 16 / 9; */
         }
 
         .video-box.isMainScreen {
