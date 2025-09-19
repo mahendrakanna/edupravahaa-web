@@ -39,10 +39,10 @@ import {
 } from 'react-feather';
 
 
-import { verifyOtp, updatePassword, sendOtp, updateProfile } from '../../../redux/authentication';
+import { verifyOtp, updatePassword, sendOtp, updateProfile, getProfile } from '../../../redux/authentication';
 import toast from 'react-hot-toast';
 import "../../../@core/scss/base/pages/app-profile.scss"
-import { Controller, useForm } from 'react-hook-form';
+import { Controller, get, useForm } from 'react-hook-form';
 
 const Profile = () => {
   const dispatch = useDispatch();
@@ -231,7 +231,7 @@ const {
       console.log("photo",photo,"photoPreview",photoPreview)
           // Add profile image if selected
       if (photo) {
-        formDataToSend.append('profile_picture', photoPreview);
+        formDataToSend.append('profile_picture', photo);
       }
       
       // Check if there's any data to update
@@ -244,6 +244,7 @@ const {
       const result = await dispatch(updateProfile(formDataToSend)).unwrap();
       
       toast.success(result.message || 'Profile updated successfully!');
+      dispatch(getProfile());
       setEditMode(false);
       
       // Reset photo state after successful update
@@ -336,11 +337,15 @@ const {
               <CardBody className="text-center">
                 <div className="profile-avatar">
                   <div className="avatar-initials">
-                    {photoPreview ? (
-                      <img src={photoPreview} alt="Profile" style={{ width: '100px', height: '100px', borderRadius: '50%', objectFit: 'cover' }} />
-                    ) : (
+                     { user.profile_picture ?
+                     <img src={user.profile_picture} alt="Profile" style={{ width: '100px', height: '100px', borderRadius: '50%', objectFit: 'cover' }} />
+                     : (
                       getUserInitials()
                     )}
+
+                    {/* {photoPreview && (
+                      <img src={photoPreview} alt="Profile" style={{ width: '100px', height: '100px', borderRadius: '50%', objectFit: 'cover' }} />
+                    ) } */}
                   </div>
                 </div>
                 <h4 className="profile-name">{user?.username}</h4>

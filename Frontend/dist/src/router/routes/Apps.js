@@ -1,9 +1,23 @@
 // ** React Imports
-import { lazy } from 'react'
+import { lazy, useEffect } from 'react'
 import { Navigate } from 'react-router-dom'
 import Courses from '../../views/apps/courses'
 import MyCourses from '../../views/apps/mycourses'
-import LiveClass from '../../views/apps/liveClass'
+import Landing from '../../views/apps/liveClass'
+import LiveClass from '../../views/apps/liveClass/liveClass'
+
+// Open live class landing in a new tab/window, then navigate away
+const LiveClassLauncher = () => {
+  useEffect(() => {
+    try {
+      const url = `${window.location.origin}/live-class/landing`
+      window.open(url, '_blank', 'noopener,noreferrer')
+    } catch (e) {
+      // ignore
+    }
+  }, [])
+  return <Navigate to="/calendar" replace />
+}
 
 
 const Calendar = lazy(() => import('../../views/apps/calendar'))
@@ -30,8 +44,23 @@ const AppRoutes = [
     path: '/mycourses'
   },
   {
+    element: <LiveClassLauncher />,
+    path: '/live-class',
+    meta: { layout: 'blank', publicRoute: true }
+  }
+  ,
+  { element: <Landing />, path: '/live-class/landing', meta: { layout: 'blank', publicRoute: true } },
+  { element: <Landing />, path: '/live-class/landing/:roomId', meta: { layout: 'blank', publicRoute: true } },
+  {
     element: <LiveClass />,
-    path: '/live-class'
+    path: '/live-class/session/:roomId',
+    meta: { layout: 'blank', publicRoute: true }
+  }
+  ,
+  {
+    element: <LiveClass />,
+    path: '/live-class/session',
+    meta: { layout: 'blank', publicRoute: true }
   }
 ]
 

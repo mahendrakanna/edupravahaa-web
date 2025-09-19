@@ -176,7 +176,6 @@ export const updateProfile = createAsyncThunk(
       const token = getState().auth.token;
       const response = await api.patch(apiList.auth.getProfile, payload, {
         headers: {
-          'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
       });

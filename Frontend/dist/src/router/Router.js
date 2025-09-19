@@ -20,6 +20,7 @@
   const Error = lazy(() => import('../views/pages/misc/Error'))
   const Login = lazy(() => import('../views/pages/authentication/Login'))
   const NotAuthorized = lazy(() => import('../views/pages/misc/NotAuthorized'))
+  const LiveClassLanding = lazy(() => import('../views/apps/liveClass'))
 
   const Router = () => {
     // ** Hooks
@@ -42,6 +43,24 @@
         index: true,
         element: <Navigate replace to={getHomeRoute()} />
       },
+    {
+      path: '/live-class/landing',
+      element: <LiveClassLanding />
+    },
+    {
+      path: '/live-class/landing/:roomId',
+      element: <LiveClassLanding />
+    },
+    {
+      path: '/live-class/landing',
+      element: <BlankLayout />,
+      children: [{ path: '/live-class/landing', element: <LiveClassLanding /> }]
+    },
+    {
+      path: '/live-class/landing/:roomId',
+      element: <BlankLayout />,
+      children: [{ path: '/live-class/landing/:roomId', element: <LiveClassLanding /> }]
+    },
       {
         path: '/login',
         element: <BlankLayout />,
