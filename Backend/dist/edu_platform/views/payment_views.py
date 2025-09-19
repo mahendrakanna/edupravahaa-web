@@ -18,25 +18,43 @@ client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_S
 # Set up logging
 logger = logging.getLogger(__name__)
 
+def api_response(message, message_type, data=None, status_code=200):
+    """Standardizes API response structure."""
+    response_data = {
+        'message': message,
+        'message_type': message_type
+    }
+    if data is not None:
+        response_data['data'] = data
+    return Response(response_data, status=status_code)
+
 def get_error_message(serializer):
-    """Extracts a specific error message from serializer errors."""
+    """Extracts a specific, field-aware error message from serializer errors."""
     errors = serializer.errors
     if 'non_field_errors' in errors:
         return errors['non_field_errors'][0]
     for field, error in errors.items():
         if isinstance(error, dict) and 'error' in error:
             return error['error']
-        return error[0] if isinstance(error, list) else error
-    return 'Invalid input data.'
+        error_msg = error[0] if isinstance(error, list) else str(error)
+        field_name = field.replace('_', ' ').title()
+        if error_msg == 'This field is required.':
+            return f"{field_name} is required."
+        if error_msg == 'This field may not be blank.':
+            return f"{field_name} cannot be empty."
+        return error_msg
+    return 'Invalid input data provided.'
 
 class BaseAPIView(views.APIView):
     def validate_serializer(self, serializer_class, data, context=None):
         serializer = serializer_class(data=data, context=context or {'request': self.request})
         if not serializer.is_valid():
-            raise serializers.ValidationError({
-                'error': get_error_message(serializer),
-                'status': status.HTTP_400_BAD_REQUEST
-            })
+            error_msg = get_error_message(serializer)
+            return api_response(
+                message=error_msg,
+                message_type='error',
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
         return serializer
 
 class CreateOrderView(BaseAPIView):
@@ -51,17 +69,19 @@ class CreateOrderView(BaseAPIView):
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'message': openapi.Schema(type=openapi.TYPE_STRING),
+                        'message': openapi.Schema(type=openapi.TYPE_STRING, description="Response message"),
+                        'message_type': openapi.Schema(type=openapi.TYPE_STRING, enum=['success', 'error'], description="Type of message"),
                         'data': openapi.Schema(
                             type=openapi.TYPE_OBJECT,
                             properties={
-                                'order_id': openapi.Schema(type=openapi.TYPE_STRING),
-                                'amount': openapi.Schema(type=openapi.TYPE_NUMBER),
-                                'currency': openapi.Schema(type=openapi.TYPE_STRING),
-                                'key': openapi.Schema(type=openapi.TYPE_STRING),
-                                'subscription_id': openapi.Schema(type=openapi.TYPE_INTEGER),
-                                'batch': openapi.Schema(type=openapi.TYPE_STRING)
-                            }
+                                'order_id': openapi.Schema(type=openapi.TYPE_STRING, description="Razorpay order ID"),
+                                'amount': openapi.Schema(type=openapi.TYPE_NUMBER, description="Order amount in paise"),
+                                'currency': openapi.Schema(type=openapi.TYPE_STRING, description="Currency code (e.g., INR)"),
+                                'key': openapi.Schema(type=openapi.TYPE_STRING, description="Razorpay key ID"),
+                                'subscription_id': openapi.Schema(type=openapi.TYPE_INTEGER, description="Subscription ID"),
+                                'batch': openapi.Schema(type=openapi.TYPE_STRING, description="Selected batch")
+                            },
+                            description="Order details"
                         )
                     }
                 )
@@ -71,8 +91,8 @@ class CreateOrderView(BaseAPIView):
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'error': openapi.Schema(type=openapi.TYPE_STRING),
-                        'status': openapi.Schema(type=openapi.TYPE_INTEGER)
+                        'message': openapi.Schema(type=openapi.TYPE_STRING, description="Error message, e.g., 'Razorpay Payment Id is required.'"),
+                        'message_type': openapi.Schema(type=openapi.TYPE_STRING, enum=['success', 'error'], description="Type of message")
                     }
                 )
             ),
@@ -81,8 +101,8 @@ class CreateOrderView(BaseAPIView):
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'error': openapi.Schema(type=openapi.TYPE_STRING),
-                        'status': openapi.Schema(type=openapi.TYPE_INTEGER)
+                        'message': openapi.Schema(type=openapi.TYPE_STRING, description="Error message"),
+                        'message_type': openapi.Schema(type=openapi.TYPE_STRING, enum=['success', 'error'], description="Type of message")
                     }
                 )
             ),
@@ -91,8 +111,8 @@ class CreateOrderView(BaseAPIView):
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'error': openapi.Schema(type=openapi.TYPE_STRING),
-                        'status': openapi.Schema(type=openapi.TYPE_INTEGER)
+                        'message': openapi.Schema(type=openapi.TYPE_STRING, description="Error message"),
+                        'message_type': openapi.Schema(type=openapi.TYPE_STRING, enum=['success', 'error'], description="Type of message")
                     }
                 )
             ),
@@ -101,8 +121,8 @@ class CreateOrderView(BaseAPIView):
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'error': openapi.Schema(type=openapi.TYPE_STRING),
-                        'status': openapi.Schema(type=openapi.TYPE_INTEGER)
+                        'message': openapi.Schema(type=openapi.TYPE_STRING, description="Error message"),
+                        'message_type': openapi.Schema(type=openapi.TYPE_STRING, enum=['success', 'error'], description="Type of message")
                     }
                 )
             )
@@ -112,6 +132,9 @@ class CreateOrderView(BaseAPIView):
         """Generates Razorpay order and creates/updates subscription and enrollment."""
         try:
             serializer = self.validate_serializer(CreateOrderSerializer, request.data)
+            if isinstance(serializer, Response):
+                return serializer 
+            
             course_id = serializer.validated_data['course_id']
             batch = serializer.validated_data['batch']
             course = Course.objects.get(id=course_id, is_active=True)
@@ -178,37 +201,46 @@ class CreateOrderView(BaseAPIView):
                 )
                 logger.info(f"Created new enrollment for subscription {subscription.id} with batch {batch}")
 
-            return Response({
-                'message': 'Order created successfully.',
-                'data': {
+            return api_response(
+                message='Order created successfully.',
+                message_type='success',
+                data={
                     'order_id': order['id'],
                     'amount': order['amount'],
                     'currency': order['currency'],
                     'key': settings.RAZORPAY_KEY_ID,
                     'subscription_id': subscription.id,
                     'batch': batch
-                }
-            }, status=status.HTTP_200_OK)
+                },
+                status_code=status.HTTP_200_OK
+            )
 
         except serializers.ValidationError as e:
-            return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
+            return api_response(
+                message=get_error_message(e),
+                message_type='error',
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
         except Course.DoesNotExist:
-            return Response({
-                'error': 'Course not found or inactive.',
-                'status': status.HTTP_400_BAD_REQUEST
-            }, status=status.HTTP_400_BAD_REQUEST)
+            return api_response(
+                message='The selected course does not exist or is not active.',
+                message_type='error',
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
         except razorpay.errors.BadRequestError as e:
             logger.error(f"Razorpay error creating order: {str(e)}")
-            return Response({
-                'error': f'Payment gateway error: {str(e)}',
-                'status': status.HTTP_400_BAD_REQUEST
-            }, status=status.HTTP_400_BAD_REQUEST)
+            return api_response(
+                message='Payment gateway error. Please try again or contact support.',
+                message_type='error',
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
         except Exception as e:
             logger.error(f"Unexpected error creating order: {str(e)}")
-            return Response({
-                'error': 'Failed to create order. Please try again.',
-                'status': status.HTTP_500_INTERNAL_SERVER_ERROR
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return api_response(
+                message='Failed to create order. Please try again later.',
+                message_type='error',
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 class VerifyPaymentView(BaseAPIView):
     """Verifies Razorpay payment and updates subscription and enrollment."""
@@ -222,14 +254,16 @@ class VerifyPaymentView(BaseAPIView):
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'message': openapi.Schema(type=openapi.TYPE_STRING),
+                        'message': openapi.Schema(type=openapi.TYPE_STRING, description="Response message"),
+                        'message_type': openapi.Schema(type=openapi.TYPE_STRING, enum=['success', 'error'], description="Type of message"),
                         'data': openapi.Schema(
                             type=openapi.TYPE_OBJECT,
                             properties={
-                                'subscription_id': openapi.Schema(type=openapi.TYPE_INTEGER),
-                                'course_name': openapi.Schema(type=openapi.TYPE_STRING),
-                                'batch': openapi.Schema(type=openapi.TYPE_STRING)
-                            }
+                                'subscription_id': openapi.Schema(type=openapi.TYPE_INTEGER, description="Subscription ID"),
+                                'course_name': openapi.Schema(type=openapi.TYPE_STRING, description="Course name"),
+                                'batch': openapi.Schema(type=openapi.TYPE_STRING, description="Selected batch")
+                            },
+                            description="Payment verification details"
                         )
                     }
                 )
@@ -239,8 +273,8 @@ class VerifyPaymentView(BaseAPIView):
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'error': openapi.Schema(type=openapi.TYPE_STRING),
-                        'status': openapi.Schema(type=openapi.TYPE_INTEGER)
+                        'message': openapi.Schema(type=openapi.TYPE_STRING, description="Error message, e.g., 'Razorpay Payment Id is required.'"),
+                        'message_type': openapi.Schema(type=openapi.TYPE_STRING, enum=['success', 'error'], description="Type of message")
                     }
                 )
             ),
@@ -249,8 +283,8 @@ class VerifyPaymentView(BaseAPIView):
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'error': openapi.Schema(type=openapi.TYPE_STRING),
-                        'status': openapi.Schema(type=openapi.TYPE_INTEGER)
+                        'message': openapi.Schema(type=openapi.TYPE_STRING, description="Error message"),
+                        'message_type': openapi.Schema(type=openapi.TYPE_STRING, enum=['success', 'error'], description="Type of message")
                     }
                 )
             ),
@@ -259,8 +293,8 @@ class VerifyPaymentView(BaseAPIView):
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'error': openapi.Schema(type=openapi.TYPE_STRING),
-                        'status': openapi.Schema(type=openapi.TYPE_INTEGER)
+                        'message': openapi.Schema(type=openapi.TYPE_STRING, description="Error message"),
+                        'message_type': openapi.Schema(type=openapi.TYPE_STRING, enum=['success', 'error'], description="Type of message")
                     }
                 )
             ),
@@ -269,8 +303,8 @@ class VerifyPaymentView(BaseAPIView):
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'error': openapi.Schema(type=openapi.TYPE_STRING),
-                        'status': openapi.Schema(type=openapi.TYPE_INTEGER)
+                        'message': openapi.Schema(type=openapi.TYPE_STRING, description="Error message"),
+                        'message_type': openapi.Schema(type=openapi.TYPE_STRING, enum=['success', 'error'], description="Type of message")
                     }
                 )
             )
@@ -280,6 +314,9 @@ class VerifyPaymentView(BaseAPIView):
         """Verifies payment signature and updates subscription and enrollment status."""
         try:
             serializer = self.validate_serializer(VerifyPaymentSerializer, request.data)
+            if isinstance(serializer, Response):
+                return serializer  # Return error response from validate_serializer
+            
             payment_id = serializer.validated_data['razorpay_payment_id']
             order_id = serializer.validated_data['razorpay_order_id']
             signature = serializer.validated_data['razorpay_signature']
@@ -289,14 +326,16 @@ class VerifyPaymentView(BaseAPIView):
             if subscription.payment_status == 'completed':
                 enrollment = CourseEnrollment.objects.get(subscription=subscription)
                 logger.info(f"Payment already verified for subscription {subscription.id}, user {request.user.id}")
-                return Response({
-                    'message': 'Payment already verified.',
-                    'data': {
+                return api_response(
+                    message='Payment has already been verified.',
+                    message_type='success',
+                    data={
                         'subscription_id': subscription.id,
                         'course_name': subscription.course.name,
                         'batch': enrollment.batch
-                    }
-                }, status=status.HTTP_200_OK)
+                    },
+                    status_code=status.HTTP_200_OK
+                )
 
             # Verify payment signature
             params_dict = {
@@ -314,10 +353,11 @@ class VerifyPaymentView(BaseAPIView):
                     logger.error(f"Signature verification failed for subscription {subscription.id}, user {request.user.id}: {str(e)}")
                     subscription.payment_status = 'failed'
                     subscription.save()
-                    return Response({
-                        'error': 'Invalid payment signature.',
-                        'status': status.HTTP_400_BAD_REQUEST
-                    }, status=status.HTTP_400_BAD_REQUEST)
+                    return api_response(
+                        message='Invalid payment signature. Please try again.',
+                        message_type='error',
+                        status_code=status.HTTP_400_BAD_REQUEST
+                    )
 
             # Update subscription details
             subscription.payment_id = payment_id
@@ -329,26 +369,34 @@ class VerifyPaymentView(BaseAPIView):
             enrollment = CourseEnrollment.objects.get(subscription=subscription)
             
             logger.info(f"Payment verified for subscription {subscription.id}, user {request.user.id}, course {subscription.course.name}, batch {enrollment.batch}")
-            return Response({
-                'message': 'Payment verified successfully.',
-                'data': {
+            return api_response(
+                message='Payment verified successfully.',
+                message_type='success',
+                data={
                     'subscription_id': subscription.id,
                     'course_name': subscription.course.name,
                     'batch': enrollment.batch
-                }
-            }, status=status.HTTP_200_OK)
+                },
+                status_code=status.HTTP_200_OK
+            )
 
         except serializers.ValidationError as e:
-            return Response(e.detail, status=status.HTTP_400_BAD_REQUEST)
+            return api_response(
+                message=get_error_message(e),
+                message_type='error',
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
         except CourseEnrollment.DoesNotExist:
             logger.error(f"No enrollment found for subscription {subscription.id if 'subscription' in locals() else 'unknown'}")
-            return Response({
-                'error': 'No enrollment found for this subscription.',
-                'status': status.HTTP_400_BAD_REQUEST
-            }, status=status.HTTP_400_BAD_REQUEST)
+            return api_response(
+                message='No enrollment found for this subscription. Please contact support.',
+                message_type='error',
+                status_code=status.HTTP_400_BAD_REQUEST
+            )
         except Exception as e:
             logger.error(f"Error updating subscription {subscription.id if 'subscription' in locals() else 'unknown'} for user {request.user.id}: {str(e)}")
-            return Response({
-                'error': 'Failed to verify payment. Please try again.',
-                'status': status.HTTP_500_INTERNAL_SERVER_ERROR
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return api_response(
+                message='Failed to verify payment. Please try again later.',
+                message_type='error',
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

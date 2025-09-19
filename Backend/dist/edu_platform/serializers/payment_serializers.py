@@ -7,12 +7,12 @@ def validate_batch_for_course(value, course):
     schedules = ClassSchedule.objects.filter(course=course)
     if not schedules.exists():
         raise serializers.ValidationError({
-            'error': f"No schedules available for course '{course.name}'."
+            'error': f"No schedules are available for the course '{course.name}'. Please contact support."
         })
     available_batches = set(schedule.batch for schedule in schedules)
     if value not in available_batches:
         raise serializers.ValidationError({
-            'error': f"Batch '{value}' is not available for course '{course.name}'."
+            'error': f"The batch '{value}' is not available for the course '{course.name}'. Available batches are: {', '.join(available_batches)}."
         })
     return value
 
@@ -27,7 +27,7 @@ class CreateOrderSerializer(serializers.Serializer):
         try:
             course = Course.objects.get(id=value, is_active=True)
         except Course.DoesNotExist:
-            raise serializers.ValidationError({"error": "Course not found or inactive."})
+            raise serializers.ValidationError({"error": "The selected course does not exist or is not active."})
         
         # Check for existing completed subscription
         if CourseSubscription.objects.filter(
@@ -35,7 +35,7 @@ class CreateOrderSerializer(serializers.Serializer):
             course=course,
             payment_status='completed'
         ).exists():
-            raise serializers.ValidationError({"error": "You are already subscribed to this course."})
+            raise serializers.ValidationError({"error": "You are already enrolled in this course."})
         
         return value
 
@@ -46,27 +46,27 @@ class CreateOrderSerializer(serializers.Serializer):
             course = Course.objects.get(id=course_id, is_active=True)
             return validate_batch_for_course(value, course)
         except Course.DoesNotExist:
-            raise serializers.ValidationError({"error": "Course not found or inactive."})
+            raise serializers.ValidationError({"error": "The selected course does not exist or is not active."})
 
     def validate(self, attrs):
         """Ensures user is verified before creating order."""
         if not self.context['request'].user.is_verified:
             errors = []
             if not self.context['request'].user.email_verified:
-                errors.append("Email not verified.")
+                errors.append("Your email is not verified.")
             if not self.context['request'].user.phone_verified:
-                errors.append("Phone not verified.")
-            raise serializers.ValidationError({"error": ", ".join(errors)})
+                errors.append("Your phone number is not verified.")
+            raise serializers.ValidationError({"error": " ".join(errors)})
         
         return attrs
 
 
 class VerifyPaymentSerializer(serializers.Serializer):
     """Validates payment verification data."""
-    razorpay_order_id = serializers.CharField()
-    razorpay_payment_id = serializers.CharField()
-    razorpay_signature = serializers.CharField()
-    subscription_id = serializers.IntegerField()
+    razorpay_order_id = serializers.CharField(required=True)
+    razorpay_payment_id = serializers.CharField(required=True)
+    razorpay_signature = serializers.CharField(required=True)
+    subscription_id = serializers.IntegerField(required=True)
 
     def validate(self, attrs):
         """Ensures subscription exists and is pending."""
@@ -78,7 +78,7 @@ class VerifyPaymentSerializer(serializers.Serializer):
                 payment_status='pending'
             )
         except CourseSubscription.DoesNotExist:
-            raise serializers.ValidationError({"error": "Subscription not found or already processed."})
+            raise serializers.ValidationError({"error": "The subscription was not found or has already been processed."})
         
         attrs['subscription'] = subscription
         return attrs
