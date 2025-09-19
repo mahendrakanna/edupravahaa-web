@@ -132,7 +132,7 @@ const coursesSlice = createSlice({
       })
       .addCase(fetchSessions.fulfilled, (state, action) => {
         state.loading = false;
-        state.sessions = action.payload || [];
+        state.sessions = action.payload.data || [];
       })
       .addCase(fetchSessions.rejected, (state, action) => {
         state.loading = false;
