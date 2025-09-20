@@ -4,6 +4,7 @@ import { Navigate } from 'react-router-dom'
 import Courses from '../../views/apps/courses'
 import MyCourses from '../../views/apps/mycourses'
 import LiveClass from '../../views/apps/liveClass'
+import StudentDashboard from '../../views/dashboard/studentDashboard'
 
 
 const Calendar = lazy(() => import('../../views/apps/calendar'))
@@ -20,6 +21,11 @@ const AppRoutes = [
     element: <DashboardEcommerce />,
     path: '/dashboard'
   },
+  {
+    element: <StudentDashboard />,
+    path: '/student-dashboard'
+  },
+
 
   {
     element: <Courses/>,
