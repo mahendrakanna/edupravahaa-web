@@ -5,7 +5,7 @@ import auth from './authentication'
 
 import calendar from '@src/views/apps/calendar/store'
 import courses from './coursesSlice'
-import meeting from './meetingSlice'
+// import meeting from './meetingSlice'
 
 const rootReducer = {
   auth,
@@ -13,8 +13,7 @@ const rootReducer = {
   layout,
   calendar,
   courses,
-  dashboard,
-  meeting
+  // meeting
 
 }
 
