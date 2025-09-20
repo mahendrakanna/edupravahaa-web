@@ -9,6 +9,9 @@ const SidebarLeft = ({ toggleSidebar, store, dispatch, updateFilter, updateAllFi
     dispatch(updateAllFilters({ all: checked, sessions }))
   }
 
+  // console.log('SidebarLeft sessions:', sessions)
+  // console.log("courseNames:", courseNames, store.selectedCalendars)
+
   return (
     <Fragment>
       <Card className='sidebar-wrapper shadow-none'>
@@ -29,7 +32,10 @@ const SidebarLeft = ({ toggleSidebar, store, dispatch, updateFilter, updateAllFi
               id='view-all'
               type='checkbox'
               className='select-all'
-              checked={store.selectedCalendars.length === courseNames.length}
+              checked={
+                courseNames.length > 0 &&
+                store.selectedCalendars.length === courseNames.length
+              }
               onChange={e => handleSelectAll(e.target.checked)}
             />
             <Label className='form-check-label' for='view-all'>View All</Label>

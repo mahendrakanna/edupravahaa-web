@@ -71,38 +71,17 @@ const Calendar = props => {
 
     eventDidMount(info) {
       const isCompleted = info.event.extendedProps.completed
-      tippy(info.el, {
-        content: `${info.event.title}`,
-        placement: 'top',
-        arrow: true
-      })
-
+      let tooltipContent = info.event.title
       if (isCompleted) {
-        const completedDiv = document.createElement('div')
-        completedDiv.innerHTML = `<span style="font-size:1.1em;">&#10003;</span> Completed`
-        completedDiv.style.color = 'green'
-        completedDiv.style.fontSize = '0.85em'
-        completedDiv.style.marginTop = '2px'
-        completedDiv.style.position = 'absolute'
-        completedDiv.style.top = '100%'
-        completedDiv.style.left = '0'
-        completedDiv.style.background = '#fff'
-        completedDiv.style.padding = '2px 8px'
-        completedDiv.style.borderRadius = '4px'
-        completedDiv.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)'
-        completedDiv.style.zIndex = '10'
-        completedDiv.style.display = 'none'
-
-        info.el.style.position = 'relative'
-        info.el.appendChild(completedDiv)
-
-        info.el.addEventListener('mouseenter', () => {
-          completedDiv.style.display = 'block'
-        })
-        info.el.addEventListener('mouseleave', () => {
-          completedDiv.style.display = 'none'
-        })
+        tooltipContent += ` <br/><span style="color:white; font-weight:500;">✔ Completed</span>`
       }
+
+       tippy(info.el, {
+          content: tooltipContent,
+          placement: 'top',
+          arrow: true,
+          allowHTML: true 
+        })
     },
 
     customButtons: {

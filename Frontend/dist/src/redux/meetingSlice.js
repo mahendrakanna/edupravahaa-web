@@ -229,15 +229,26 @@ export function getLandingDefaults() { const hash = window.location.hash; if (ha
 export function createSocket() {
   const env = (typeof import.meta !== 'undefined' && import.meta.env) || {}
   const sameOriginUrl = '' // same-origin by default (proxy/dev-server)
-  const socket = io(env.VITE_SOCKET_URL || env.REACT_APP_SOCKET_URL || sameOriginUrl, {
-    withCredentials: false,
-    transports: ['websocket', 'polling'],
-    auth(cb) {
-      const { sessionId } = useLocalState.getState()
-      const { id: currentRoomId } = useRemoteState.getState().room || {}
-      cb({ sessionId, currentRoomId })
-    },
-  })
+  // const socket = io(env.VITE_SOCKET_URL || env.REACT_APP_SOCKET_URL || sameOriginUrl, {
+  //   withCredentials: false,
+  //   transports: ['websocket', 'polling'],
+  //   auth(cb) {
+  //     const { sessionId } = useLocalState.getState()
+  //     const { id: currentRoomId } = useRemoteState.getState().room || {}
+  //     cb({ sessionId, currentRoomId })
+  //   },
+  // })
+    const socket = io('http://localhost:8000', {
+    path: '/socket.io/',
+    transports: ['websocket'],
+    auth: (cb) => {
+      const { sessionId } = useLocalState.getState();
+      const { id: currentRoomId } = useRemoteState.getState().room || {};
+      const finalSessionId = sessionId || nanoid();
+      console.log('[mooz] createSocket auth:', { sessionId: finalSessionId, currentRoomId });
+      cb({ sessionId: finalSessionId, currentRoomId });
+    }
+  });
   socket.onAny((event, ...args) => debug(`socket.io: '${event}'`, ...args))
   return socket
 }

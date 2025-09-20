@@ -6,7 +6,6 @@ const RecordedClasses = () => {
   const [selectedCourse, setSelectedCourse] = useState(null);
   const videoRefs = useRef({});
 
-  // Dummy data to validate layout and interactions
   const courses = [
     {
       id: 1,
