@@ -3,6 +3,8 @@ from rest_framework import serializers
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.decorators import api_view, parser_classes, permission_classes
+from rest_framework.parsers import MultiPartParser, FormParser
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from django.utils import timezone
@@ -12,6 +14,7 @@ from django.core.exceptions import ValidationError
 from edu_platform.permissions.auth_permissions import IsAdmin, IsTeacher
 from edu_platform.models import User, ClassSchedule, ClassSession, Course, CourseEnrollment
 from edu_platform.serializers.class_serializers import ClassScheduleSerializer, ClassSessionSerializer, CourseSessionSerializer
+from django.db.models import Q
 import logging
 
 logger = logging.getLogger(__name__)
@@ -90,7 +93,7 @@ class ClassScheduleView(APIView):
                                                 'session_date': openapi.Schema(type=openapi.TYPE_STRING, format='date'),
                                                 'start_time': openapi.Schema(type=openapi.TYPE_STRING, format='date-time'),
                                                 'end_time': openapi.Schema(type=openapi.TYPE_STRING, format='date-time'),
-                                                'recording_url': openapi.Schema(type=openapi.TYPE_STRING, nullable=True),
+                                                'recording': openapi.Schema(type=openapi.TYPE_STRING, nullable=True),
                                                 'is_active': openapi.Schema(type=openapi.TYPE_BOOLEAN)
                                             }
                                         ),
@@ -218,7 +221,7 @@ class ClassScheduleView(APIView):
                                                     'session_date': openapi.Schema(type=openapi.TYPE_STRING, format='date'),
                                                     'start_time': openapi.Schema(type=openapi.TYPE_STRING, format='date-time'),
                                                     'end_time': openapi.Schema(type=openapi.TYPE_STRING, format='date-time'),
-                                                    'recording_url': openapi.Schema(type=openapi.TYPE_STRING, nullable=True),
+                                                    'recording': openapi.Schema(type=openapi.TYPE_STRING, nullable=True),
                                                     'is_active': openapi.Schema(type=openapi.TYPE_BOOLEAN)
                                                 }
                                             )
@@ -258,7 +261,7 @@ class ClassScheduleView(APIView):
                                                         'session_date': openapi.Schema(type=openapi.TYPE_STRING, format='date'),
                                                         'start_time': openapi.Schema(type=openapi.TYPE_STRING, format='date-time'),
                                                         'end_time': openapi.Schema(type=openapi.TYPE_STRING, format='date-time'),
-                                                        'recording_url': openapi.Schema(type=openapi.TYPE_STRING, nullable=True),
+                                                        'recording': openapi.Schema(type=openapi.TYPE_STRING, nullable=True),
                                                         'is_active': openapi.Schema(type=openapi.TYPE_BOOLEAN)
                                                     }
                                                 )
@@ -404,7 +407,7 @@ class ClassScheduleView(APIView):
                                             'session_date': openapi.Schema(type=openapi.TYPE_STRING, format='date'),
                                             'start_time': openapi.Schema(type=openapi.TYPE_STRING, format='date-time'),
                                             'end_time': openapi.Schema(type=openapi.TYPE_STRING, format='date-time'),
-                                            'recording_url': openapi.Schema(type=openapi.TYPE_STRING, nullable=True),
+                                            'recording': openapi.Schema(type=openapi.TYPE_STRING, nullable=True),
                                             'is_active': openapi.Schema(type=openapi.TYPE_BOOLEAN)
                                         }
                                     )
@@ -561,7 +564,7 @@ class ClassSessionListView(APIView):
                                                             'session_date': openapi.Schema(type=openapi.TYPE_STRING, format='date'),
                                                             'start_time': openapi.Schema(type=openapi.TYPE_STRING, format='date-time'),
                                                             'end_time': openapi.Schema(type=openapi.TYPE_STRING, format='date-time'),
-                                                            'recording_url': openapi.Schema(type=openapi.TYPE_STRING, nullable=True),
+                                                            'recording': openapi.Schema(type=openapi.TYPE_STRING, nullable=True),
                                                             'is_active': openapi.Schema(type=openapi.TYPE_BOOLEAN)
                                                         }
                                                     ),
@@ -658,7 +661,7 @@ class ClassSessionUpdateView(APIView):
                                 'session_date': openapi.Schema(type=openapi.TYPE_STRING, format='date', description="Session date"),
                                 'start_time': openapi.Schema(type=openapi.TYPE_STRING, format='date-time', description="Start time"),
                                 'end_time': openapi.Schema(type=openapi.TYPE_STRING, format='date-time', description="End time"),
-                                'recording_url': openapi.Schema(type=openapi.TYPE_STRING, nullable=True, description="Recording URL"),
+                                'recording': openapi.Schema(type=openapi.TYPE_STRING, nullable=True, description="Recording URL"),
                                 'is_active': openapi.Schema(type=openapi.TYPE_BOOLEAN, description="Active status")
                             },
                             description="Updated class session"
@@ -889,8 +892,8 @@ class ClassSessionUpdateView(APIView):
                 )
 
             # Validate S3 URL if provided
-            if 'recording_url' in data and data['recording_url']:
-                s3_url = data['recording_url']
+            if 'recording' in data and data['recording']:
+                s3_url = data['recording']
                 if not s3_url.startswith('https://') or 's3' not in s3_url:
                     return api_response(
                         message='Invalid S3 URL format.',
@@ -945,3 +948,97 @@ class ClassSessionUpdateView(APIView):
                 message_type='error',
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+@api_view(['POST'])
+@parser_classes([MultiPartParser, FormParser])
+def upload_class_recording(request, class_id):
+    """
+    Upload a class recording (video file) and attach it to ClassSession
+    """
+    try:
+        session = ClassSession.objects.get(id=class_id)
+    except ClassSession.DoesNotExist:
+        return Response({"error": "Class session not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    file_obj = request.FILES.get("recording")
+
+    if not file_obj:
+        return Response({"error": "No file uploaded"}, status=status.HTTP_400_BAD_REQUEST)
+
+    session.recording = file_obj
+    session.save()
+
+    return api_response(
+        message= "Recording uploaded successfully",
+        message_type= "'success'",
+        status_code=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_recordings(request):
+    """
+    Get class session recordings filtered by course_id, batch, and date range.
+    """
+    user = request.user
+    course_id = request.query_params.get('course_id')
+    batch_name = request.query_params.get('batch_name')
+    batch_start_date = request.query_params.get('batch_start_date')
+    batch_end_date = request.query_params.get('batch_end_date')
+
+    if not course_id:
+        return Response({"error": "course_id is required"}, status=400)
+
+    filters = Q(course_id=course_id)
+    if batch_name:
+        filters &= Q(batch=batch_name)
+    if batch_start_date:
+        filters &= Q(batch_start_date__gte=batch_start_date)
+    if batch_end_date:
+        filters &= Q(batch_end_date__lte=batch_end_date)
+
+    if user.is_teacher:
+        schedules = ClassSchedule.objects.filter(filters, teacher=user)
+    elif user.is_student:
+        # Get the enrolled batch for this course (only one per student per course)
+        enrolled_batch = CourseEnrollment.objects.filter(
+            student=user,
+            course_id=course_id,
+            subscription__payment_status="completed"
+        ).values_list("batch", flat=True).first()
+
+        if not enrolled_batch:
+            return api_response(
+                message="No enrolled batch found for this course.",
+                message_type="info",
+                data=[],
+                status_code=status.HTTP_200_OK
+            )
+            
+        # Filter schedules by that batch
+        schedules = ClassSchedule.objects.filter(filters, batch=enrolled_batch)
+    elif user.is_admin:
+        schedules = ClassSchedule.objects.filter(filters)
+    else:
+        return Response({"error": "Unauthorized role"}, status=403)
+
+    sessions = ClassSession.objects.filter(
+        schedule__in=schedules,
+        recording__isnull=False
+    ).order_by("session_date")
+
+    # Build custom response
+    data = [
+        {
+            "class_id": session.id,
+            "recording": request.build_absolute_uri(session.recording.url) if session.recording else None
+        }
+        for session in sessions
+    ]
+    return api_response(
+        message="Class recordings fetched successfully.",
+        message_type='success',
+        data=data,
+        status_code=status.HTTP_200_OK
+    )
