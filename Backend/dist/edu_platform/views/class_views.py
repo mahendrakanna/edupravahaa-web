@@ -11,10 +11,11 @@ from django.utils import timezone
 from datetime import timedelta, datetime
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.db import DatabaseError
 from edu_platform.permissions.auth_permissions import IsAdmin, IsTeacher
-from edu_platform.models import User, ClassSchedule, ClassSession, Course, CourseEnrollment
+from edu_platform.models import User, ClassSchedule, ClassSession, Course, CourseEnrollment, CourseSubscription
 from edu_platform.serializers.class_serializers import ClassScheduleSerializer, ClassSessionSerializer, CourseSessionSerializer
-from django.db.models import Q
+from django.db.models import Q, F, Count
 import logging
 
 logger = logging.getLogger(__name__)
@@ -959,12 +960,12 @@ def upload_class_recording(request, class_id):
     try:
         session = ClassSession.objects.get(id=class_id)
     except ClassSession.DoesNotExist:
-        return Response({"error": "Class session not found"}, status=status.HTTP_404_NOT_FOUND)
+        return api_response(message= "Class session not found", message_type=error, status=status.HTTP_404_NOT_FOUND)
 
     file_obj = request.FILES.get("recording")
 
     if not file_obj:
-        return Response({"error": "No file uploaded"}, status=status.HTTP_400_BAD_REQUEST)
+        return api_response(message= "No file uploaded", message_type=error, status=status.HTTP_404_NOT_FOUND)
 
     session.recording = file_obj
     session.save()
@@ -975,70 +976,289 @@ def upload_class_recording(request, class_id):
         status_code=status.HTTP_200_OK)
 
 
-@api_view(['GET'])
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_recordings(request):
     """
-    Get class session recordings filtered by course_id, batch, and date range.
+    Return list of courses with their recording count and batch details based on user role.
+    - If query params (course_id, batch_name, batch_start_date, batch_end_date) provided:
+        - Student: only purchased and enrolled course (matching batch) with batch details and recordings.
+        - Teacher: only assigned course with batch schedules and recordings, separate objects for each batch.
+        - Admin: all courses with batch details and recordings.
+    - If no query params, return all relevant courses.
     """
+
+    # Check if user is authenticated
+    if not request.user.is_authenticated:
+        return api_response(
+            message= "User is not authenticated.",
+            message_type= "error",
+            status_code=401
+        )
+
     user = request.user
+
+    # Validate user role
+    if not hasattr(user, 'role') or user.role not in ['admin', 'teacher', 'student']:
+        return api_response(
+            message= "Invalid user role.",
+            message_type= "error",
+            status_code=400
+        )
+
+    # Get query parameters
     course_id = request.query_params.get('course_id')
     batch_name = request.query_params.get('batch_name')
     batch_start_date = request.query_params.get('batch_start_date')
     batch_end_date = request.query_params.get('batch_end_date')
 
-    if not course_id:
-        return Response({"error": "course_id is required"}, status=400)
+    try:
+        # Base queryset → all courses
+        courses_qs = Course.objects.all()
 
-    filters = Q(course_id=course_id)
-    if batch_name:
-        filters &= Q(batch=batch_name)
-    if batch_start_date:
-        filters &= Q(batch_start_date__gte=batch_start_date)
-    if batch_end_date:
-        filters &= Q(batch_end_date__lte=batch_end_date)
+        # Apply course_id filter if provided
+        if course_id:
+            try:
+                courses_qs = courses_qs.filter(id=course_id)
+                if not courses_qs.exists():
+                    return api_response(
+                        message= f"Course with ID {course_id} not found.",
+                        message_type= "error",
+                        status_code=404
+                    )
+            except ValueError:
+                return api_response(
+                    message= "Invalid course_id provided.",
+                    message_type= "error",
+                    status_code=400
+                )
+                
 
-    if user.is_teacher:
-        schedules = ClassSchedule.objects.filter(filters, teacher=user)
-    elif user.is_student:
-        # Get the enrolled batch for this course (only one per student per course)
-        enrolled_batch = CourseEnrollment.objects.filter(
-            student=user,
-            course_id=course_id,
-            subscription__payment_status="completed"
-        ).values_list("batch", flat=True).first()
+        # Apply role-based filtering
+        if user.is_student:
+            # Get courses where user has a completed subscription and matching batch enrollment
+            courses_qs = courses_qs.filter(
+                subscriptions__student=user,
+                subscriptions__payment_status='completed',
+                enrollments__student=user,
+                enrollments__batch=F('class_schedules__batch')
+            )
+        elif user.is_teacher:
+            # Get courses assigned to teacher through class schedules
+            courses_qs = courses_qs.filter(
+                class_schedules__teacher=user
+            )
+        # Admin sees all courses, no additional filter needed
 
-        if not enrolled_batch:
+        # Check if any courses are found
+        if not courses_qs.exists():
             return api_response(
-                message="No enrolled batch found for this course.",
-                message_type="info",
-                data=[],
-                status_code=status.HTTP_200_OK
+                message= "No courses found for the given criteria.",
+                message_type= "error",
+                status_code=400
             )
             
-        # Filter schedules by that batch
-        schedules = ClassSchedule.objects.filter(filters, batch=enrolled_batch)
-    elif user.is_admin:
-        schedules = ClassSchedule.objects.filter(filters)
-    else:
-        return Response({"error": "Unauthorized role"}, status=403)
 
-    sessions = ClassSession.objects.filter(
-        schedule__in=schedules,
-        recording__isnull=False
-    ).order_by("session_date")
+        # Build response data
+        data = []
+        for course in courses_qs.distinct():
+            # Filter schedules based on query parameters
+            schedules = ClassSchedule.objects.filter(course=course)
 
-    # Build custom response
-    data = [
-        {
-            "class_id": session.id,
-            "recording": request.build_absolute_uri(session.recording.url) if session.recording else None
-        }
-        for session in sessions
-    ]
-    return api_response(
-        message="Class recordings fetched successfully.",
-        message_type='success',
-        data=data,
-        status_code=status.HTTP_200_OK
-    )
+            if batch_name:
+                if batch_name not in ['weekdays', 'weekends']:
+                    return api_response(
+                        message= f"Invalid batch_name: {batch_name}. Must be 'weekdays' or 'weekends'.",
+                        message_type= "error",
+                        status_code=400
+                    )
+                    
+                schedules = schedules.filter(batch=batch_name)
+
+            if batch_start_date:
+                try:
+                    start_date = datetime.strptime(batch_start_date, '%Y-%m-%d').date()
+                    schedules = schedules.filter(batch_start_date__gte=start_date)
+                except ValueError:
+                    return api_response(
+                        message= "Invalid batch_start_date format. Use YYYY-MM-DD.",
+                        message_type= "error",
+                        status_code=400
+                    )
+
+            if batch_end_date:
+                try:
+                    end_date = datetime.strptime(batch_end_date, '%Y-%m-%d').date()
+                    schedules = schedules.filter(batch_end_date__lte=end_date)
+                except ValueError:
+                    return api_response(
+                        message= "Invalid batch_end_date format. Use YYYY-MM-DD.",
+                        message_type= "error",
+                        status_code=400
+                    )
+
+            # Apply role-specific schedule filtering
+            if user.is_student:
+                # Only include schedules matching enrolled batches
+                enrollments = CourseEnrollment.objects.filter(
+                    student=user,
+                    course=course,
+                    subscription__payment_status='completed'
+                )
+                enrolled_batches = enrollments.values_list('batch', flat=True)
+                schedules = schedules.filter(batch__in=enrolled_batches)
+            elif user.is_teacher:
+                # Only include schedules assigned to the teacher
+                schedules = schedules.filter(teacher=user)
+            # Admin sees all schedules, no additional filter needed
+
+            # If no schedules match after filtering, skip this course
+            if not schedules.exists() and (batch_name or batch_start_date or batch_end_date):
+                continue
+
+            for schedule in schedules:
+                # Get recordings for this batch and count them
+                recordings = ClassSession.objects.filter(
+                    schedule=schedule,
+                    recording__isnull=False
+                ).values('class_id', 'recording')
+                
+                # Calculate recording count for this specific batch
+                batch_recording_count = recordings.count()
+
+                data.append({
+                    "course_id": course.id,
+                    "course_name": course.name,
+                    "recording_count": batch_recording_count,
+                    "batch_name": schedule.batch,
+                    "batch_start_date": schedule.batch_start_date,
+                    "batch_end_date": schedule.batch_end_date,
+                    "batch_recordings": [
+                        {
+                            "class_id": str(recording['class_id']),
+                            "recording": str(recording['recording']) if recording['recording'] else None
+                        }
+                        for recording in recordings
+                    ]
+                })
+
+        # Check if any data was generated
+        if not data:
+            return api_response(
+                message= "No courses or batches found for the given criteria.",
+                message_type= "error",
+                status_code=404
+            )
+
+        return api_response(
+            message= "Course with batch recording fetched successfully.",
+            message_type= "success",
+            data= data,
+            status_code=200
+        )
+
+    except DatabaseError:
+        return api_response(
+            message= "A database error occurred while fetching courses.",
+            message_type= "error",
+            status_code=500
+        )
+    except Exception as e:
+        return api_response(
+            message= f"An unexpected error occurred: {str(e)}",
+            message_type= "error",
+            status_code=500
+        )
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def course_recording_count(request):
+    """
+    Return list of courses with their recording count based on user role.
+    - Student: only purchased and enrolled courses (matching batch).
+    - Teacher: only assigned courses with their batch schedules.
+    - Admin: all courses.
+    """
+
+    # Check if user is authenticated
+    if not request.user.is_authenticated:
+        return api_response(
+            message= "User is not authenticated.",
+            message_type= "error",
+            status_code=401
+        )
+
+    user = request.user
+
+    # Validate user role
+    if not hasattr(user, 'role') or user.role not in ['admin', 'teacher', 'student']:
+        return api_response(
+            message= "Invalid user role.",
+            message_type= "error",
+            status_code=400
+        )
+
+    try:
+        # Base queryset → all courses with annotated recording count
+        courses_qs = Course.objects.annotate(
+            recording_count=Count(
+                "class_schedules__sessions",
+                filter=Q(class_schedules__sessions__recording__isnull=False),
+                distinct=True,
+            )
+        )
+
+        # Apply role-based filtering
+        if user.is_student:
+            # Get courses where user has a completed subscription and matching batch enrollment
+            courses_qs = courses_qs.filter(
+                subscriptions__student=user,
+                subscriptions__payment_status='completed',
+                enrollments__student=user,
+                enrollments__batch=F('class_schedules__batch')
+            )
+        elif user.is_teacher:
+            # Get courses assigned to teacher through class schedules
+            courses_qs = courses_qs.filter(
+                class_schedules__teacher=user
+            )
+        # Admin sees all courses, no additional filter needed
+
+        # Check if any courses are found
+        if not courses_qs.exists():
+            return api_response(
+                message= "No courses found for the given criteria.",
+                message_type= "error",
+                status_code=404
+            )
+
+        # Build response data
+        data = [
+            {
+                "course_id": course.id,
+                "course_name": course.name,
+                "recording_count": course.recording_count,
+            }
+            for course in courses_qs.distinct()
+        ]
+
+        return api_response(
+            message= "Course with recording count fetched successfully.",
+            message_type= "success",
+            data= data,
+            status_code=200
+        )
+
+    except DatabaseError:
+        return api_response(
+            message= "A database error occurred while fetching courses.",
+            message_type= "error",
+            status_code=500
+        )
+    except Exception as e:
+        return Response(
+            message= f"An unexpected error occurred: {str(e)}",
+            message_type= "error",
+            status_code=500
+        )
