@@ -182,3 +182,85 @@ class TeacherDashboardAPIView(APIView):
                 message_type="error",
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+from django.utils import timezone
+from datetime import timedelta
+from edu_platform.models import User, StudentProfile, CourseEnrollment, ClassSession, CourseSubscription
+
+class StudentDashboardAPIView(APIView):
+    """Returns the dashboard data for a student."""
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, student_id):
+        try:
+            student = User.objects.get(id=student_id, role='student')
+        except User.DoesNotExist:
+            return Response({"message": "Student not found.", "message_type": "error"}, status=404)
+
+        # Student info
+        student_name = student.get_full_name() or student.email
+
+        # Learning stats
+        enrollments = CourseEnrollment.objects.filter(student=student)
+        total_hours = sum(e.course.duration_hours for e in enrollments)
+        assignments_total = enrollments.count() * 5  # Example: 5 assignments per course
+        assignments_completed = assignments_total  # Placeholder, can be replaced with actual tracking
+
+        learning_stats = {
+            "total_learning_hours": total_hours,
+            "assignments_completed": assignments_completed,
+            "assignments_total": assignments_total,
+        }
+
+        # Skills progress (based on enrolled courses)
+        skills = []
+        for e in enrollments:
+            skills.append({
+                "name": e.course.name,
+                "progress": min(100, int(total_hours / e.course.duration_hours * 100))  # simplistic example
+            })
+
+        # Weekly learning trends (last 7 days)
+        today = timezone.now().date()
+        week_days = [(today - timedelta(days=i)) for i in range(6, -1, -1)]
+        weekly_trends = []
+
+        for day in week_days:
+            sessions = ClassSession.objects.filter(
+                schedule__in=[e.course.class_schedules.first() for e in enrollments],
+                session_date=day
+            )
+            hours = sum((s.end_time - s.start_time).seconds / 3600 for s in sessions)
+            weekly_trends.append({
+                "day": day.strftime("%a"),
+                "hours": round(hours, 2)
+            })
+
+        # Certificates (completed subscriptions)
+        certificates = []
+        subscriptions = CourseSubscription.objects.filter(student=student, payment_status='completed')
+        for sub in subscriptions:
+            certificates.append({
+                "studentName": student_name,
+                "courseName": sub.course.name,
+                "badge": "gold"  # you can make this dynamic if you have badge info
+            })
+
+        data = {
+            "student_name": student_name,
+            "learning_stats": learning_stats,
+            "skills": skills,
+            "weekly_learning_trends": weekly_trends,
+            "certificates": certificates
+        }
+
+        return Response({
+            "message": "Student dashboard retrieved successfully.",
+            "message_type": "success",
+            "data": data
+        })
