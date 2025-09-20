@@ -5,16 +5,15 @@ from rest_framework import status
 from rest_framework.response import Response
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
-
 from django.utils import timezone
 from django.db.models import Sum, F, ExpressionWrapper, DurationField
 from datetime import timedelta, datetime, time, date
 import calendar
 import logging
 import traceback
+from edu_platform.views.course_views import api_response
+from edu_platform.models import User, StudentProfile, CourseEnrollment, ClassSession, CourseSubscription
 
-from edu_platform.models import ClassSession, CourseEnrollment
-from edu_platform.views.course_views import api_response  # your helper
 
 logger = logging.getLogger(__name__)
 
@@ -183,14 +182,6 @@ class TeacherDashboardAPIView(APIView):
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-
-
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-from django.utils import timezone
-from datetime import timedelta
-from edu_platform.models import User, StudentProfile, CourseEnrollment, ClassSession, CourseSubscription
 
 class StudentDashboardAPIView(APIView):
     """Returns the dashboard data for a student."""
