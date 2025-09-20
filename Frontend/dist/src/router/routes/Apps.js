@@ -3,7 +3,23 @@ import { lazy, useEffect } from 'react'
 import { Navigate } from 'react-router-dom'
 import Courses from '../../views/apps/courses'
 import MyCourses from '../../views/apps/mycourses'
-import LiveClass from '../../views/apps/liveClass'
+import Landing from '../../views/apps/liveClass'
+import LiveClass from '../../views/apps/liveClass/liveClass'
+import RecordedClasses from '../../views/apps/recordedvideos/recordedClasses'
+import StudentDashboard from '../../views/dashboard/studentDashboard'
+
+// Open live class landing in a new tab/window, then navigate away
+const LiveClassLauncher = () => {
+  useEffect(() => {
+    try {
+      const url = `${window.location.origin}/live-class/landing`
+      window.open(url, '_blank', 'noopener,noreferrer')
+    } catch (e) {
+      // ignore
+    }
+  }, [])
+  return <Navigate to="/calendar" replace />
+}
 
 
 const Calendar = lazy(() => import('../../views/apps/calendar'))
@@ -19,12 +35,11 @@ const AppRoutes = [
   {
     element: <DashboardEcommerce />,
     path: '/dashboard'
-  },
+  }, 
   {
     element: <StudentDashboard />,
     path: '/student-dashboard'
   },
-
 
   {
     element: <Courses/>,
