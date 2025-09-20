@@ -29,6 +29,7 @@ urlpatterns = [
     path('api/auth/', include('edu_platform.urls.auth_urls')),
     path('api/courses/', include('edu_platform.urls.course_urls')),
     path('api/classes/', include('edu_platform.urls.class_urls')),
+    path('api/dashboard/', include('edu_platform.urls.dashboard_urls')),
     path('api/payments/', include('edu_platform.urls.payment_urls')),
     # path('api/recordings/', include('edu_platform.urls.recordings_urls')),
     
