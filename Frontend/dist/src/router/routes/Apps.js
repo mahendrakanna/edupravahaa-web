@@ -5,6 +5,7 @@ import Courses from '../../views/apps/courses'
 import MyCourses from '../../views/apps/mycourses'
 import Landing from '../../views/apps/liveClass'
 import LiveClass from '../../views/apps/liveClass/liveClass'
+import RecordedClasses from '../../views/apps/recordedvideos/recordedClasses'
 
 // Open live class landing in a new tab/window, then navigate away
 const LiveClassLauncher = () => {
@@ -43,6 +44,11 @@ const AppRoutes = [
     element: <MyCourses />,
     path: '/mycourses'
   },
+    {
+    element: <RecordedClasses />,
+    path: '/recordedvideos',
+    
+  },
   {
     element: <LiveClassLauncher />,
     path: '/live-class',
@@ -61,7 +67,7 @@ const AppRoutes = [
     element: <LiveClass />,
     path: '/live-class/session',
     meta: { layout: 'blank', publicRoute: true }
-  }
+  },
 ]
 
 export default AppRoutes

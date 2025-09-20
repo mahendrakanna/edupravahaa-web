@@ -121,6 +121,13 @@ const groupedBatches = course.schedule?.reduce((acc, batch) => {
 
 const batchList = groupedBatches ? Object.values(groupedBatches) : []
 
+  // Normalize advantages to an array
+  const advantagesArray = Array.isArray(course?.advantages)
+    ? course.advantages
+    : (typeof course?.advantages === 'string'
+        ? course.advantages.split(',').map(s => s.trim()).filter(Boolean)
+        : [])
+
 
   return (
     <>
@@ -166,16 +173,20 @@ const batchList = groupedBatches ? Object.values(groupedBatches) : []
           <p className="lead">{course.description}</p>
 
           <h6 className="fw-bold mt-3">Key Advantages:</h6>
-          <ListGroup flush>
-            {course.advantages?.map((adv, idx) => (
-              <ListGroupItem
-                key={idx}
-                className="d-flex align-items-center border-0 px-0"
-              >
-                <FaCheckCircle className="text-success me-2" /> {adv}
-              </ListGroupItem>
-            ))}
-          </ListGroup>
+          {advantagesArray.length > 0 ? (
+            <ListGroup flush>
+              {advantagesArray.map((adv, idx) => (
+                <ListGroupItem
+                  key={idx}
+                  className="d-flex align-items-center border-0 px-0"
+                >
+                  <FaCheckCircle className="text-success me-2" /> {adv}
+                </ListGroupItem>
+              ))}
+            </ListGroup>
+          ) : (
+            <p className="text-muted mb-0">Details will be updated soon.</p>
+          )}
 
           {/* ✅ Batch Selection or Coming Soon */}
           <h6 className="fw-bold mt-1">Available Batches:</h6>

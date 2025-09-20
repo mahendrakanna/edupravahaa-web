@@ -79,14 +79,14 @@ const CourseCard = ({ course }) => {
       {/* Modal */}
       <Modal isOpen={modal} toggle={toggle} size="lg" centered>
         <ModalHeader toggle={toggle} className="fw-bold modal-header-custom">
-          {courseData.name}
+          {courseData?.name}
         </ModalHeader>
         <ModalBody className="course-modal-body">
           <p className="lead">{courseData.description}</p>
 
           <h6 className="fw-bold mt-1">Key Advantages:</h6>
           <ListGroup flush>
-            {courseData.advantages?.map((adv, idx) => (
+            {courseData?.advantages?.map((adv, idx) => (
               <ListGroupItem
                 key={idx}
                 className="d-flex align-items-center border-0 px-0"
@@ -97,7 +97,7 @@ const CourseCard = ({ course }) => {
           </ListGroup>
 
           <h6 className="fw-bold mt-1">Your Batch:</h6>
-          {batchList.map((batch, idx) => (
+          {batchList?.map((batch, idx) => (
             <div key={idx} className="mb-1 p-1 border rounded shadow-sm">
               {batch.sessions.map((s, i) => (
                 <p key={i} className="mb-1">
@@ -108,7 +108,7 @@ const CourseCard = ({ course }) => {
 
               <Badge color="info" className="me-2">
                 Starts from{" "}
-                {new Date(batch.sessions[0].startDate).toLocaleDateString("en-US", {
+                {new Date(batch?.sessions[0]?.startDate).toLocaleDateString("en-US", {
                   day: "2-digit",
                   month: "long",
                   year: "numeric"
@@ -116,7 +116,7 @@ const CourseCard = ({ course }) => {
               </Badge>
               <Badge color="warning" className="me-2">
                 Ends on{" "}
-                {new Date(batch.sessions[0].endDate).toLocaleDateString("en-US", {
+                {new Date(batch?.sessions[0]?.endDate).toLocaleDateString("en-US", {
                   day: "2-digit",
                   month: "long",
                   year: "numeric"
@@ -135,19 +135,19 @@ const CourseCard = ({ course }) => {
             </span>
             <span>
               <FaChartLine className="me-2 text-primary" />
-              Price: ₹{courseData.base_price}
+              Price: ₹{courseData?.base_price}
             </span>
           </div>
 
           {/* ✅ Purchased Info */}
           <div className="mt-1">
-            <Badge color={course.payment_status ? "success" : "secondary"} className="p-1">
-              Payment: {course.payment_status || "Not Paid"}
+            <Badge color={course?.payment_status ? "success" : "secondary"} className="p-1">
+              Payment: {course?.payment_status || "Not Paid"}
             </Badge>{" "}
             <Badge color="secondary" className="p-1">
               Purchased at:{" "}
-              {course.purchased_at
-                ? new Date(course.purchased_at).toLocaleString()
+              {course?.purchased_at
+                ? new Date(course?.purchased_at).toLocaleString()
                 : "N/A"}
             </Badge>
           </div>
