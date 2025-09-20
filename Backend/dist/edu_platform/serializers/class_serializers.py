@@ -17,10 +17,18 @@ def parse_time_string(value):
 
 
 class ClassSessionSerializer(serializers.ModelSerializer):
+    recording = serializers.SerializerMethodField()
     class Meta:
         model = ClassSession
-        fields = ['id', 'session_date', 'start_time', 'end_time', 'recording_url', 'is_active']
+        fields = ['id', 'session_date', 'start_time', 'end_time', 'recording', 'is_active']
         read_only_fields = ['is_active']
+
+
+    def get_recording(self, obj):
+        request = self.context.get("request")
+        if obj.recording and hasattr(obj.recording, "url"):
+            return request.build_absolute_uri(obj.recording.url) if request else obj.recording.url
+        return None
 
 
 class BatchDetailSerializer(serializers.ModelSerializer):

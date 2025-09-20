@@ -388,7 +388,7 @@ class ClassSession(models.Model):
     session_date = models.DateField()
     start_time = models.DateTimeField()
     end_time = models.DateTimeField()
-    recording_url = models.URLField(blank=True, null=True, help_text="S3 URL for class recording")
+    recording = models.FileField(upload_to="recordings/", blank=True, null=True, help_text="Local class recording")
     is_active = models.BooleanField(default=True, help_text="Whether the class is live or accessible")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
