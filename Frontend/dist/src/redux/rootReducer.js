@@ -5,13 +5,15 @@ import auth from './authentication'
 
 import calendar from '@src/views/apps/calendar/store'
 import courses from './coursesSlice'
+import meeting from './meetingSlice'
 
 const rootReducer = {
   auth,
   navbar,
   layout,
   calendar,
-  courses
+  courses,
+  meeting
 
 }
 

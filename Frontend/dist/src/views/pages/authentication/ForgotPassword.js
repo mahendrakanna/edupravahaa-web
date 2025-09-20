@@ -9,10 +9,11 @@ import { isUserLoggedIn } from '@utils'
 
 // ** Custom Hooks
 import { useSkin } from '@hooks/useSkin'
+import { useApiWithToast } from '@src/utility/hooks/useApiWithToast'
 
 // ** Icons Imports
 import { ChevronLeft } from 'react-feather'
-import { useDispatch } from 'react-redux'
+import { useDispatch, useSelector } from 'react-redux'
 
 // ** Illustrations Imports
 import illustrationsLight from '@src/assets/images/pages/forgot-password-v2.svg'
@@ -23,6 +24,7 @@ import '@styles/react/pages/page-authentication.scss'
 import { useState } from 'react'
 import toast from 'react-hot-toast'
 import { forgotPassword, sendOtp, verifyOtp } from '../../../redux/authentication'
+import UILoader from '@src/@core/components/ui-loader'
 
 const ForgotPassword = () => {
   // ** Hooks
@@ -36,8 +38,29 @@ const ForgotPassword = () => {
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [errors, setErrors] = useState({})
+  const { loading } = useSelector(state => state.auth)
 
   const source = skin === 'dark' ? illustrationsDark : illustrationsLight
+
+  // ** API hooks with toast
+  const { execute: executeSendOtp, loading: sendOtpLoading } = useApiWithToast(sendOtp, {
+    onSuccess: (result) => {
+      setStep(2)
+    }
+  })
+
+  const { execute: executeVerifyOtp, loading: verifyOtpLoading } = useApiWithToast(verifyOtp, {
+    onSuccess: (result) => {
+      setOtpVerified(true)
+      setStep(3)
+    }
+  })
+
+  const { execute: executeForgotPassword, loading: forgotPasswordLoading } = useApiWithToast(forgotPassword, {
+    onSuccess: (result) => {
+      navigate("/login")
+    }
+  })
 
  const handleSendOtp = (e) => {
   e.preventDefault()
@@ -68,15 +91,7 @@ const ForgotPassword = () => {
     purpose: "password_reset"
   }
 
-  dispatch(sendOtp(payload))
-    .unwrap()
-    .then((res) => {
-      toast.success(res?.message || "OTP sent successfully ✅") // ✅ show backend message
-      setStep(2)
-    })
-    .catch((err) => {
-      toast.error(err?.error || err || "Failed to send OTP ❌")
-    })
+  executeSendOtp(payload)
 }
 
 
@@ -102,17 +117,7 @@ const handleVerifyOtp = (e) => {
     purpose: "password_reset"
   }
 
-  dispatch(verifyOtp(payload))
-    .unwrap()
-    .then((res) => {
-      toast.success(res?.message || "OTP verified ✅") // ✅ backend message
-      setOtpVerified(true)
-      setStep(3)
-    })
-    .catch((err) => {
-      toast.error(err?.error || err || "Invalid OTP ❌")
-      setErrors({ otp: "Invalid OTP" })
-    })
+  executeVerifyOtp(payload)
 }
 
 
@@ -143,21 +148,16 @@ const handleResetPassword = (e) => {
     otp_code: otp.trim()
   }
 
-  dispatch(forgotPassword(payload))
-    .unwrap()
-    .then((res) => {
-      toast.success(res?.message || "Password reset successful! 🎉") // ✅ backend message
-      navigate("/login")
-    })
-    .catch((err) => {
-      toast.error(err?.message || err || "Failed to reset password ❌")
-    })
+  executeForgotPassword(payload)
 }
 
 
+  const isLoading = loading || sendOtpLoading || verifyOtpLoading || forgotPasswordLoading
+
   if (!isUserLoggedIn()) {
     return (
-      <div className='auth-wrapper auth-cover'>
+      <UILoader blocking={isLoading}>
+        <div className='auth-wrapper auth-cover'>
         <Row className='auth-inner m-0'>
           {/* Logo */}
           <Link className='brand-logo' to='/' onClick={e => e.preventDefault()}>
@@ -217,7 +217,9 @@ const handleResetPassword = (e) => {
                     />
                     {errors.identifier && <FormFeedback>{errors.identifier}</FormFeedback>}
                   </div>
-                  <Button color='primary' block>Send OTP</Button>
+                  <Button color='primary' block disabled={isLoading}>
+                    {isLoading ? 'Sending...' : 'Send OTP'}
+                  </Button>
                 </Form>
               )}
 
@@ -236,7 +238,9 @@ const handleResetPassword = (e) => {
                     />
                     {errors.otp && <FormFeedback>{errors.otp}</FormFeedback>}
                   </div>
-                  <Button color='primary' block>Verify OTP</Button>
+                  <Button color='primary' block disabled={isLoading}>
+                    {isLoading ? 'Verifying...' : 'Verify OTP'}
+                  </Button>
                 </Form>
               )}
 
@@ -267,7 +271,9 @@ const handleResetPassword = (e) => {
                     />
                     {errors.confirmPassword && <FormFeedback>{errors.confirmPassword}</FormFeedback>}
                   </div>
-                  <Button color='primary' block>Submit</Button>
+                  <Button color='primary' block disabled={isLoading}>
+                    {isLoading ? 'Resetting...' : 'Submit'}
+                  </Button>
                 </Form>
               )}
 
@@ -281,7 +287,8 @@ const handleResetPassword = (e) => {
             </Col>
           </Col>
         </Row>
-      </div>
+        </div>
+      </UILoader>
     )
   } else {
     return <Navigate to='/' />

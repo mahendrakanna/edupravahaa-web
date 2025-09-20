@@ -153,7 +153,7 @@ export const updatePassword = createAsyncThunk(
   async (payload, { rejectWithValue, getState }) => {
     try {
       const token = getState().auth.token;
-      const response = await api.put(apiList.auth.updatePassword, payload, {
+      const response = await api.post(apiList.auth.updatePassword, payload, {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
@@ -176,7 +176,6 @@ export const updateProfile = createAsyncThunk(
       const token = getState().auth.token;
       const response = await api.patch(apiList.auth.getProfile, payload, {
         headers: {
-          'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
       });
@@ -262,27 +261,30 @@ const authSlice = createSlice({
       // console.log("Login successful:", action.payload);
 
       state.loading = false;
+      state.success = true;
+      state.error = null;
 
       // ✅ Save tokens properly
-      state.token = action.payload.access;
-      state.refreshToken = action.payload.refresh;
+      state.token = action.payload.data.access;
+      state.refreshToken = action.payload.data.refresh;
 
       state.user = {
-        user_type: action.payload.user_type,
-        is_trial: action.payload.is_trial,
-        has_purchased: action.payload.has_purchased,
-        trial_ends_at: action.payload.trial_ends_at,
-        trial_remaining_seconds: action.payload.trial_remaining_seconds,
+        user_type: action.payload.data.user_type,
+        is_trial: action.payload.data.is_trial,
+        has_purchased: action.payload.data.has_purchased,
+        trial_ends_at: action.payload.data?.trial_ends_at,
+        trial_remaining_seconds: action.payload.data?.trial_remaining_seconds,
       };
 
       // ✅ Store in localStorage
-      localStorage.setItem('access', action.payload.access);
-      localStorage.setItem('refresh', action.payload.refresh);
+      localStorage.setItem('access', action.payload.data.access);
+      localStorage.setItem('refresh', action.payload.data.refresh);
       localStorage.setItem('userData', JSON.stringify(state.user));
     });
 
     builder.addCase(loginUser.rejected, (state, action) => {
       state.loading = false;
+      state.success = false;
       state.error = action.payload;
     });
 
@@ -321,7 +323,7 @@ const authSlice = createSlice({
     });
     builder.addCase(getTrialPeriod.fulfilled, (state, action) => {
       state.loading = false;
-      state.trialPeriodData = action.payload;
+      state.trialPeriodData = action.payload.data;
     });
     builder.addCase(getTrialPeriod.rejected, (state, action) => {
       state.loading = false;
@@ -398,8 +400,6 @@ const authSlice = createSlice({
   })
   builder.addCase(updateProfile.fulfilled, (state, action) => {
     state.loading = false
-    state.user = action.payload.data 
-    localStorage.setItem('userData', JSON.stringify(action.payload.data))
   })
   builder.addCase(updateProfile.rejected, (state, action) => {
     state.loading = false

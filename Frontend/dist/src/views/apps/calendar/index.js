@@ -1,7 +1,7 @@
 // ** React Imports
 import { Fragment, useState, useEffect } from 'react'
 import classnames from 'classnames'
-import { Row, Col } from 'reactstrap'
+import { Row, Col, Spinner } from 'reactstrap'
 import Calendar from './Calendar'
 import SidebarLeft from './SidebarLeft'
 import { useSelector, useDispatch } from 'react-redux'
@@ -13,7 +13,7 @@ import { useRTL } from '@hooks/useRTL'
 const CalendarComponent = () => {
   const dispatch = useDispatch()
   const store = useSelector(state => state.calendar)
-  const { mycourseslist ,sessions} = useSelector((state) => state.courses)
+  const { mycourseslist, sessions, loading } = useSelector((state) => state.courses)
 
   const [calendarApi, setCalendarApi] = useState(null)
   const [leftSidebarOpen, setLeftSidebarOpen] = useState(false)
@@ -42,7 +42,7 @@ const CalendarComponent = () => {
     }
   }, [sessions, dispatch])
 
-  console.log('Sessions from Redux:', sessions);
+  // console.log('Sessions from Redux:', sessions);
 
   // helper: build schedule dates
   function getScheduleDates(schedule) {
@@ -100,7 +100,7 @@ const CalendarComponent = () => {
     })
   }) || []
 
-console.log('Session Events:', sessionEvents);
+// console.log('Session Events:', sessionEvents);F
   // filter by selected courses
 const filteredEvents = sessionEvents.filter(
   event => store.selectedCalendars.includes(event.extendedProps.courseName)
@@ -112,6 +112,23 @@ const eventsToShow = store.selectedCalendars.length > 0 ? filteredEvents : sessi
 
   return (
     <Fragment>
+{loading && (
+  <div
+    className="d-flex justify-content-center align-items-center"
+    style={{
+      position: "absolute",
+      top: 0,
+      left: 0,
+      width: "100%",
+      height: "100%",
+      background: "transparent overlay", 
+      zIndex: 9999,
+    }}
+  >
+    <Spinner style={{ width: "3rem", height: "3rem" }} color="primary" />
+  </div>
+)}
+
       <div className='app-calendar overflow-hidden border'>
         <Row className='g-0'>
           <Col

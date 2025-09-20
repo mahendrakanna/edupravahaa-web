@@ -1,6 +1,7 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import api from "../utility/api"; 
 import apiList from "../../api.json";
+import toast from 'react-hot-toast';
 
 
 
@@ -28,6 +29,8 @@ export const fetchCourses = createAsyncThunk(
       return response.data;
     } catch (err) {
       console.error("Error fetching courses:", err.message, err.config?.url);
+      const errorMessage = err.response?.data?.message || err.message || "Failed to fetch courses";
+      toast.error(errorMessage);
       return rejectWithValue(err.response?.data || err.message || "Failed to fetch courses");
     }
   }
@@ -56,6 +59,8 @@ export const fetchMyCourses = createAsyncThunk(
       return response.data;
     } catch (err) {
       console.error("Error fetching my courses:",err, err.message, err.config?.url); // Line ~46
+      const errorMessage = err.response?.data?.message || err.message || "Failed to fetch my courses";
+      toast.error(errorMessage);
       return rejectWithValue(err.response?.data || err.message || "Failed to fetch my courses");
     }
   }
@@ -84,6 +89,8 @@ export const fetchSessions = createAsyncThunk(
       return response.data;
     } catch (err) {
       console.error("Error fetching sessions:", err.message, err.config?.url);
+      const errorMessage = err.response?.data?.message || err.message || "Failed to fetch sessions";
+      toast.error(errorMessage);
       return rejectWithValue(err.response?.data || err.message || "Failed to fetch sessions");
     }
   }
@@ -108,6 +115,10 @@ const coursesSlice = createSlice({
       .addCase(fetchCourses.fulfilled, (state, action) => {
         state.loading = false;
         state.courses = action.payload.data || [];
+        // Show success toast if there's a message
+        if (action.payload.message) {
+          toast.success(action.payload.message);
+        }
       })
       .addCase(fetchCourses.rejected, (state, action) => {
         state.loading = false;
@@ -120,6 +131,10 @@ const coursesSlice = createSlice({
       .addCase(fetchMyCourses.fulfilled, (state, action) => {
         state.loading = false;
         state.mycourseslist = action.payload.data || [];
+        // Show success toast if there's a message
+        if (action.payload.message) {
+          toast.success(action.payload.message);
+        }
       })
       .addCase(fetchMyCourses.rejected, (state, action) => {
         state.loading = false;
@@ -132,7 +147,11 @@ const coursesSlice = createSlice({
       })
       .addCase(fetchSessions.fulfilled, (state, action) => {
         state.loading = false;
-        state.sessions = action.payload || [];
+        state.sessions = action.payload.data || [];
+        // Show success toast if there's a message
+        if (action.payload.message) {
+          toast.success(action.payload.message);
+        }
       })
       .addCase(fetchSessions.rejected, (state, action) => {
         state.loading = false;

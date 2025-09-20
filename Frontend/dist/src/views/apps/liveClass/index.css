@@ -6,16 +6,18 @@ body {
 }
 
 .prejoin-container {
-  max-width: 480px;
-  margin: auto;
+  max-width: 420px;
+  margin: 24px auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.join-form-card {
   background: #fff;
   border-radius: 18px;
   box-shadow: 0 4px 24px rgba(0,0,0,0.10);
-  padding: 32px 32px 24px 32px; 
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
+  padding: 16px;
 }
 
 .prejoin-header {
@@ -46,12 +48,13 @@ body {
 
 .video-preview {
   position: relative;
-  width: 320px;
-  height: 180px;
+  width: 100%;
+  max-width: 420px;
+  height: 236px;
   background: #222;
   border-radius: 16px;
   overflow: hidden;
-  margin-bottom: 18px;
+  margin: 0 auto 12px auto;
   box-shadow: 0 2px 8px rgba(0,0,0,0.10);
   display: flex;
   align-items: center;
@@ -90,7 +93,50 @@ body {
 .media-controls-prejoin {
   display: flex;
   gap: 16px;
-  margin-bottom: 18px;
+  margin: 12px 0 18px 0;
+}
+
+/* Meet-like circular icon controls on video */
+.meet-controls {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 12px;
+}
+
+.circle-btn {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #f1f3f4;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+}
+
+.circle-btn:hover { background: #e0e3e7; }
+.circle-btn.danger { background: #ea4335; color: #fff; }
+
+.ready-title {
+  font-size: 1.4rem;
+  color: #1f2937;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.join-form-card .ms-TextField-fieldGroup,
+.join-form-card .ms-TextField {
+  width: 100%;
+}
+
+.join-form-card .ms-Button--primary {
+  height: 44px;
+  border-radius: 10px;
+  background: #4285f4;
+}
+
+.join-form-card .ms-Button--primary:hover {
+  background: #357ae8;
 }
 
 .control-button-prejoin {
@@ -522,3 +568,50 @@ body {
   box-shadow: 0 1px 4px rgba(0,0,0,0.10);
   margin-top: 8px;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+.circle-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: none;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: #f1f3f4;
+  cursor: pointer;
+  font-size: 18px;
+}
+
+.circle-btn.danger {
+  background: #ea4335;
+  color: #fff;
+}
+
+.circle-btn:hover {
+  background: #e0e0e0;
+}
+
+
+
+

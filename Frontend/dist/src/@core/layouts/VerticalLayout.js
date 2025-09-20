@@ -36,6 +36,7 @@ import { useNavbarColor } from '@hooks/useNavbarColor'
 import '@styles/base/core/menu/menu-types/vertical-menu.scss'
 import '@styles/base/core/menu/menu-types/vertical-overlay-menu.scss'
 import { getProfile, getTrialPeriod, logout, logoutUser } from '../../redux/authentication'
+import api from '../../utility/api'
 import { use } from 'react'
 import TrialBanner from './components/TrialBanner'
 
@@ -54,9 +55,8 @@ const VerticalLayout = props => {
   const { layout, setLayout, setLastLayout } = useLayout()
   const { trialPeriodData, } = useSelector((state) => state.auth);
   const [remainingTime, setRemainingTime] = useState(
-  trialPeriodData?.remaining_seconds || 0
+  trialPeriodData?.trial_remaining_seconds || 0
 );
-
   // ** States
   const [isMounted, setIsMounted] = useState(false)
   const [menuVisibility, setMenuVisibility] = useState(false)
@@ -112,44 +112,69 @@ const VerticalLayout = props => {
     dispatch(getProfile());
   }, [] )
 
- useEffect(() => {
-    if (trialPeriodData && trialPeriodData.is_trial && !trialPeriodData.has_purchased) {
-      const remainingMs = trialPeriodData.remaining_seconds * 1000;
+useEffect(() => {
+  if (trialPeriodData && trialPeriodData.is_trial && !trialPeriodData.has_purchased) {
+    const remainingMs = trialPeriodData.trial_remaining_seconds * 1000;
 
-      if (remainingMs > 0) {
-        const timer = setTimeout(() => {
+    if (remainingMs > 0) {
+      const timer = setTimeout(() => {
+        const attemptLogout = () => {
+          if (api.isIdle && api.isIdle()) {
+            dispatch(logoutUser()).then(() => {
+              navigate("/login");
+            });
+          } else {
+            setTimeout(attemptLogout, 500);
+          }
+        };
+        attemptLogout();
+      }, remainingMs);
+
+      return () => clearTimeout(timer);
+    } else {
+      const attemptLogout = () => {
+        if (api.isIdle && api.isIdle()) {
           dispatch(logoutUser()).then(() => {
-            navigate("/login"); 
+            navigate("/login");
           });
-        }, remainingMs);
-
-        return () => clearTimeout(timer);
-      } else {
-        dispatch(logoutUser()).then(() => {
-          navigate("/login");
-        });
-      }
+        } else {
+          setTimeout(attemptLogout, 500);
+        }
+      };
+      attemptLogout();
     }
-  }, [trialPeriodData, dispatch, navigate]);
+  }
+}, [trialPeriodData, dispatch, navigate]);
 
 useEffect(() => {
-  if (trialPeriodData?.remaining_seconds) {
-    setRemainingTime(trialPeriodData.remaining_seconds);
+  if (trialPeriodData?.trial_remaining_seconds) {
+    setRemainingTime(trialPeriodData.trial_remaining_seconds);
   }
 }, [trialPeriodData]);
 
 useEffect(() => {
   if (remainingTime > 0) {
     const interval = setInterval(() => {
-      setRemainingTime(prev => prev - 60); // decrease by 60 seconds
-    }, 60000); // every 1 min
+      setRemainingTime(prev => prev - 60); 
+    }, 60000);
 
     return () => clearInterval(interval);
   }
 }, [remainingTime]);
 
 
-  console.log("trialPeriodData", trialPeriodData)
+  // console.log("trialPeriodData", trialPeriodData)
+const formatTime = (seconds) => {
+  if (seconds <= 0) return "Expired";
+
+  const d = Math.floor(seconds / (3600 * 24));
+  const h = Math.floor((seconds % (3600 * 24)) / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+
+  return `${d}d ${h}h ${m}m`;
+};
+
+
   // ** Vars
   const footerClasses = {
     static: 'footer-static',
@@ -223,7 +248,10 @@ useEffect(() => {
 
 
 <div className="main-content-wrapper">
-        <TrialBanner trialPeriodData={trialPeriodData} remainingTime={remainingTime} />
+        <TrialBanner 
+            trialPeriodData={trialPeriodData} 
+            remainingTime={formatTime(remainingTime)} 
+          />
         {children}
       </div>
 

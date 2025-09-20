@@ -52,13 +52,13 @@ class CourseSessionSerializer(serializers.ModelSerializer):
             schedules = ClassSchedule.objects.filter(course=obj, teacher=request.user)
         elif request.user.is_student:
             schedules = ClassSchedule.objects.filter(
-            course=obj,
-            batch__in=CourseEnrollment.objects.filter(
-                student=request.user,
                 course=obj,
-                subscription__payment_status='completed'
-            ).values('batch')
-        )
+                batch__in=CourseEnrollment.objects.filter(
+                    student=request.user,
+                    course=obj,
+                    subscription__payment_status='completed'
+                ).values('batch')
+            )
         else:
             schedules = ClassSchedule.objects.none()
 
