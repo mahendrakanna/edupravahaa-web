@@ -5,9 +5,9 @@ import auth from './authentication'
 
 import calendar from '@src/views/apps/calendar/store'
 import courses from './coursesSlice'
-// import meeting from './meetingSlice'
 import meeting from './meetingSlice'
 import dashboard from './studentDashboardSlice'
+import teacherDashboard from './teacherDashboardSlice'
 
 
 const rootReducer = {
@@ -16,7 +16,9 @@ const rootReducer = {
   layout,
   calendar,
   courses,
-  // meeting
+  meeting,
+  dashboard,
+  teacherDashboard,
 
 }
 

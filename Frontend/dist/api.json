@@ -24,5 +24,8 @@
     "payments": {
         "createOrder": "/api/payments/create_order/",
         "verifyPayment": "/api/payments/verify_payment/"
+    },
+    "dashboard": {
+        "teacherStats": "/api/dashboard/teacher/"
     }
 }
