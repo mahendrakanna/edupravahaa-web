@@ -1,10 +1,9 @@
 // ** React Imports
-import { lazy } from 'react'
+import { lazy, useEffect } from 'react'
 import { Navigate } from 'react-router-dom'
 import Courses from '../../views/apps/courses'
 import MyCourses from '../../views/apps/mycourses'
 import LiveClass from '../../views/apps/liveClass'
-import StudentDashboard from '../../views/dashboard/studentDashboard'
 
 
 const Calendar = lazy(() => import('../../views/apps/calendar'))
@@ -35,10 +34,30 @@ const AppRoutes = [
     element: <MyCourses />,
     path: '/mycourses'
   },
+    {
+    element: <RecordedClasses />,
+    path: '/recordedvideos',
+    
+  },
+  {
+    element: <LiveClassLauncher />,
+    path: '/live-class',
+    meta: { layout: 'blank', publicRoute: true }
+  }
+  ,
+  { element: <Landing />, path: '/live-class/landing', meta: { layout: 'blank', publicRoute: true } },
+  { element: <Landing />, path: '/live-class/landing/:roomId', meta: { layout: 'blank', publicRoute: true } },
   {
     element: <LiveClass />,
-    path: '/live-class'
+    path: '/live-class/session/:roomId',
+    meta: { layout: 'blank', publicRoute: true }
   }
+  ,
+  {
+    element: <LiveClass />,
+    path: '/live-class/session',
+    meta: { layout: 'blank', publicRoute: true }
+  },
 ]
 
 export default AppRoutes

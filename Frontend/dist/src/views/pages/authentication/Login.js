@@ -5,10 +5,11 @@ import { Link, useNavigate } from 'react-router-dom'
 // ** Custom Hooks
 import { useSkin } from '@hooks/useSkin'
 import useJwt from '@src/auth/jwt/useJwt'
+import { useApiWithToast } from '@src/utility/hooks/useApiWithToast'
 
 // ** Third Party Components
 import toast from 'react-hot-toast'
-import { useDispatch } from 'react-redux'
+import { useDispatch, useSelector } from 'react-redux'
 import { useForm, Controller } from 'react-hook-form'
 import { Facebook, Twitter, Mail, GitHub, HelpCircle, Coffee, X } from 'react-feather'
 
@@ -46,6 +47,7 @@ import illustrationsDark from '@src/assets/images/pages/login-v2-dark.svg'
 import '@styles/react/pages/page-authentication.scss'
 import { getProfile, loginUser } from '../../../redux/authentication'
 import { fetchMyCourses } from '../../../redux/coursesSlice'
+import UILoader from '@src/@core/components/ui-loader'
 
 const ToastContent = ({ t, name, role }) => {
   return (
@@ -65,8 +67,8 @@ const ToastContent = ({ t, name, role }) => {
 }
 
 const defaultValues = {
-  password: '123456789',
-  loginEmail: 'vepadakameswari622@gmail.com'
+  password: '12345678',
+  loginEmail: 'student@gmail.com'
 }
 
 const Login = () => {
@@ -75,6 +77,7 @@ const Login = () => {
   const dispatch = useDispatch()
   const navigate = useNavigate()
   const ability = useContext(AbilityContext)
+  const { loading: authLoading } = useSelector((state) => state.auth)
   const {
     control,
     setError,
@@ -84,48 +87,55 @@ const Login = () => {
 
   const source = skin === 'dark' ? illustrationsDark : illustrationsLight
 
-const onSubmit = (data) => {
-  if (Object.values(data).every(field => field.length > 0)) {
-    dispatch(loginUser({ identifier: data.loginEmail, password: data.password }))
-      .unwrap()
-      .then(res => {
-        // ✅ Only continue if access token is there
-        if (res.access) {
+  // ** API hooks with toast
+  const { execute: executeLogin, loading: loginLoading } = useApiWithToast(loginUser, {
+    showSuccessToast: false, // We'll handle success manually
+    showErrorToast: true,
+    onSuccess: async (result) => {
+      if (result.data.access) {
+        try {
           // Call profile API
-          dispatch(getProfile())
-            .unwrap()
-            .then(profile => {
-              const fullUser = { ...profile.data, accessToken: res.access, refreshToken: res.refresh };
-              console.log('Full User Data:', fullUser);
-               navigate(getHomeRouteForLoggedInUser(fullUser.role))
-              toast(t => (
-                <ToastContent
-                  t={t}
-                  role={profile.role || res.user_type || 'student'}
-                  name={profile.fullName || profile.username || 'User'}
-                />
-              ));
-            })
-            .catch(() => {
-              setError('loginEmail', {
-                type: 'manual',
-                message: 'Failed to fetch profile. Try again.'
-              });
-            });
-            dispatch(fetchMyCourses())
-        } else {
+          const profileResult = await dispatch(getProfile()).unwrap()
+          const fullUser = { ...profileResult.data, accessToken: result.data.access, refreshToken: result.data.refresh }
+          
+          // Show custom success toast
+          toast(t => (
+            <ToastContent
+              t={t}
+              role={profileResult.role || result.user_type || 'student'}
+              name={profileResult.fullName || profileResult.username || 'User'}
+            />
+          ))
+          
+          // Navigate to home
+          navigate(getHomeRouteForLoggedInUser(fullUser.role))
+          
+          // Fetch courses
+          dispatch(fetchMyCourses())
+        } catch (profileError) {
           setError('loginEmail', {
             type: 'manual',
-            message: 'Login failed: No access token'
-          });
+            message: 'Failed to fetch profile. Try again.'
+          })
         }
-      })
-      .catch(err => {
+      } else {
         setError('loginEmail', {
           type: 'manual',
-          message: err?.error || 'Login failed'
-        });
-      });
+          message: 'Login failed: No access token'
+        })
+      }
+    },
+    onError: (err) => {
+      setError('loginEmail', {
+        type: 'manual',
+        message: err?.error || 'Login failed'
+      })
+    }
+  })
+
+const onSubmit = (data) => {
+  if (Object.values(data).every(field => field.length > 0)) {
+    executeLogin({ identifier: data.loginEmail, password: data.password })
   } else {
     for (const key in data) {
       if (data[key].length === 0) {
@@ -133,15 +143,18 @@ const onSubmit = (data) => {
       }
     }
   }
-};
+}
+
+const isLoading = loginLoading || authLoading
 
 
 
 
 
   return (
-    <div className='auth-wrapper auth-cover'>
-      <Row className='auth-inner m-0'>
+    <UILoader blocking={isLoading}>
+      <div className='auth-wrapper auth-cover'>
+        <Row className='auth-inner m-0'>
         <Link className='brand-logo' to='/' onClick={e => e.preventDefault()}>
           <svg viewBox='0 0 139 95' version='1.1' height='28'>
             <defs>
@@ -250,8 +263,8 @@ const onSubmit = (data) => {
                   Remember Me
                 </Label>
               </div>
-              <Button type='submit' color='primary' block>
-                Sign in
+              <Button type='submit' color='primary' block disabled={isLoading}>
+                {isLoading ? 'Signing in...' : 'Sign in'}
               </Button>
             </Form>
             <p className='text-center mt-2'>
@@ -280,7 +293,8 @@ const onSubmit = (data) => {
           </Col>
         </Col>
       </Row>
-    </div>
+      </div>
+    </UILoader>
   )
 }
 

@@ -16,10 +16,22 @@ const Courses = () => {
       <h2 className="mb-2 text-center">Our Courses</h2>
 
       {loading && (
-        <div className="text-center my-4">
-          <Spinner color="primary" />
-        </div>
-      )}
+      <div
+        className="d-flex justify-content-center align-items-center"
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          width: "100%",
+          height: "100%",
+          background: "transparent overlay", // transparent white overlay
+          zIndex: 9999,
+        }}
+      >
+        <Spinner style={{ width: "3rem", height: "3rem" }} color="primary" />
+      </div>
+    )}
+
 
       {error && <Alert color="danger">{error}</Alert>}
 

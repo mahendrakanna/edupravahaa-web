@@ -39,10 +39,11 @@ import {
 } from 'react-feather';
 
 
-import { verifyOtp, updatePassword, sendOtp, updateProfile } from '../../../redux/authentication';
+import { verifyOtp, updatePassword, sendOtp, updateProfile, getProfile } from '../../../redux/authentication';
 import toast from 'react-hot-toast';
 import "../../../@core/scss/base/pages/app-profile.scss"
-import { Controller, useForm } from 'react-hook-form';
+import { Controller, get, useForm } from 'react-hook-form';
+import { useApiWithToast } from '../../../utility/hooks/useApiWithToast';
 
 const Profile = () => {
   const dispatch = useDispatch();
@@ -65,7 +66,6 @@ const {
   const [formData, setFormData] = useState({});
   const [otpModal, setOtpModal] = useState(false);
   const [otpData, setOtpData] = useState({ type: '', value: '', otp: '' });
-  const [loading, setLoading] = useState(false);
   const [alert, setAlert] = useState({ visible: false, message: '', color: '' });
   const [showPasswordUpdate, setShowPasswordUpdate] = useState(false);
   const [photo, setPhoto] = useState(null);
@@ -85,7 +85,44 @@ const {
     new_password: '',
     confirm_password: ''
   });
-  const [passwordLoading, setPasswordLoading] = useState(false);
+
+  // ** API hooks with toast
+  const { execute: executeUpdateProfile, loading: updateProfileLoading } = useApiWithToast(updateProfile, {
+    onSuccess: (result) => {
+      dispatch(getProfile());
+      setEditMode(false);
+      if (photo) {
+        setPhoto(null);
+      }
+    }
+  });
+
+  const { execute: executeUpdatePassword, loading: updatePasswordLoading } = useApiWithToast(updatePassword, {
+    onSuccess: (result) => {
+      setShowPasswordUpdate(false);
+    }
+  });
+
+  const { execute: executeSendOtp, loading: sendOtpLoading } = useApiWithToast(sendOtp, {
+    onSuccess: (result) => {
+      setOtpSentSuccess(true);
+      setOtpModal(true);
+    }
+  });
+
+  const { execute: executeVerifyOtp, loading: verifyOtpLoading } = useApiWithToast(verifyOtp, {
+    onSuccess: (result) => {
+      if (otpType === "email") setEmailVerified(true);
+      if (otpType === "phone") setPhoneVerified(true);
+      
+      // Reset OTP state
+      setOtp("");
+      setOtpType("");
+      setOtpValue("");
+      setOtpSentSuccess(false);
+      setOtpModal(false);
+    }
+  });
 
   // Initialize form data with user data
   useEffect(() => {
@@ -164,18 +201,7 @@ const {
     setOtpType(type);
     setOtpValue(value);
     
-    dispatch(sendOtp(payload))
-      .unwrap()
-      .then(res => {
-        // Show OTP sent message from backend
-        toast.success(res.message || `OTP sent to your ${type}`);
-        setOtpSentSuccess(true);
-        setOtpModal(true);
-      })
-      .catch(err => {
-        toast.error(err.error || `Failed to send OTP`);
-        setOtpSentSuccess(false);
-      });
+    executeSendOtp(payload);
   };
 
   // Handle OTP verification
@@ -192,69 +218,33 @@ const {
       purpose: "profile_update",
     };
     
-    dispatch(updateProfile(payload))
-      .unwrap()
-      .then(res => {
-        // Show success message from backend
-        toast.success(res.message || `${otpType} verified successfully`);
-
-        if (otpType === "email") setEmailVerified(true);
-        if (otpType === "phone") setPhoneVerified(true);
-
-        // Reset OTP state
-        setOtp("");
-        setOtpType("");
-        setOtpValue("");
-        setOtpSentSuccess(false);
-        setOtpModal(false);
-      })
-      .catch(err => {
-        // Show error
-        toast.error(err.error || "Invalid OTP");
-      });
+    executeVerifyOtp(payload);
   };
 
   // Handle profile update
   const handleProfileUpdate = async () => {
-    setLoading(true);
+    const formDataToSend = new FormData();
+    
+    // Add changed text fields
+    Object.keys(formData).forEach(key => {
+      if (formData[key] !== user[key]) {
+        formDataToSend.append(key, formData[key]);
+      }
+    });
 
-    try {
-      const formDataToSend = new FormData();
-      
-      // Add changed text fields
-      Object.keys(formData).forEach(key => {
-        if (formData[key] !== user[key]) {
-          formDataToSend.append(key, formData[key]);
-        }
-      });
-
-      console.log("photo",photo,"photoPreview",photoPreview)
-          // Add profile image if selected
-      if (photo) {
-        formDataToSend.append('profile_picture', photoPreview);
-      }
-      
-      // Check if there's any data to update
-      if (formDataToSend.entries().next().done && !photo) {
-        toast.info('No changes to update');
-        setLoading(false);
-        return;
-      }
-      
-      const result = await dispatch(updateProfile(formDataToSend)).unwrap();
-      
-      toast.success(result.message || 'Profile updated successfully!');
-      setEditMode(false);
-      
-      // Reset photo state after successful update
-      if (photo) {
-        setPhoto(null);
-      }
-    } catch (error) {
-      toast.error(error.error || 'Failed to update profile');
-    } finally {
-      setLoading(false);
+    console.log("photo",photo,"photoPreview",photoPreview)
+        // Add profile image if selected
+    if (photo) {
+      formDataToSend.append('profile_picture', photo);
     }
+    
+    // Check if there's any data to update
+    if (formDataToSend.entries().next().done && !photo) {
+      toast.info('No changes to update');
+      return;
+    }
+    
+    executeUpdateProfile(formDataToSend);
   };
 
   // Handle form submit
@@ -285,17 +275,7 @@ const {
     return;
   }
 
-  setPasswordLoading(true);
-
-  try {
-    const result = await dispatch(updatePassword(data)).unwrap();
-    toast.success(result.message || "Password updated successfully!");
-    setShowPasswordUpdate(false);
-  } catch (error) {
-    toast.error(error.message || "Failed to update password");
-  } finally {
-    setPasswordLoading(false);
-  }
+  executeUpdatePassword(data);
 };
 
   // Format date
@@ -318,6 +298,9 @@ const {
   const isEmailChanged = formData.email !== user?.email;
   const isPhoneChanged = formData.phone_number !== user?.phone_number;
 
+  // Combined loading state
+  const isLoading = updateProfileLoading || updatePasswordLoading || sendOtpLoading || verifyOtpLoading;
+
   return (
     <Fragment>
       <Breadcrumbs title='Profile' data={[{ title: 'Pages' }, { title: 'Profile' }]} />
@@ -336,11 +319,15 @@ const {
               <CardBody className="text-center">
                 <div className="profile-avatar">
                   <div className="avatar-initials">
-                    {photoPreview ? (
-                      <img src={photoPreview} alt="Profile" style={{ width: '100px', height: '100px', borderRadius: '50%', objectFit: 'cover' }} />
-                    ) : (
+                     { user.profile_picture ?
+                     <img src={user.profile_picture} alt="Profile" style={{ width: '100px', height: '100px', borderRadius: '50%', objectFit: 'cover' }} />
+                     : (
                       getUserInitials()
                     )}
+
+                    {/* {photoPreview && (
+                      <img src={photoPreview} alt="Profile" style={{ width: '100px', height: '100px', borderRadius: '50%', objectFit: 'cover' }} />
+                    ) } */}
                   </div>
                 </div>
                 <h4 className="profile-name">{user?.username}</h4>
@@ -448,6 +435,7 @@ const {
                   // Edit Mode
                   <Form onSubmit={handleSubmit1}>
                     {/* Upload Photo */}
+                    {user?.role === 'student' && (
                     <FormGroup>
                       <Label for="photo">Profile Photo</Label>
                       <Input
@@ -470,6 +458,7 @@ const {
                         </div>
                       )}
                     </FormGroup>
+                    )}
                     <FormGroup>
                       <Label for="username">Username</Label>
                       <Input
@@ -529,15 +518,15 @@ const {
                           color="outline-primary" 
                           className="ms-2"
                           onClick={() => handleSendOtp('phone', formData.phone_number)}
-                          disabled={!isPhoneChanged}
+                          disabled={!isPhoneChanged || sendOtpLoading}
                         >
-                          {isPhoneChanged && !phoneVerified ? 'Verify' : 'Update'}
+                          {sendOtpLoading ? 'Sending...' : (isPhoneChanged && !phoneVerified ? 'Verify' : 'Update')}
                         </Button>
                       </div>
                     </FormGroup>
                     <div className="d-flex mt-4">
-                      <Button color="primary" type="submit" className="me-2" disabled={loading}>
-                        {loading ? (
+                      <Button color="primary" type="submit" className="me-2" disabled={isLoading}>
+                        {isLoading ? (
                           <>
                             <span className="spinner-border spinner-border-sm me-1" />
                             Saving...
@@ -549,7 +538,7 @@ const {
                           </>
                         )}
                       </Button>
-                      <Button color="outline-secondary" onClick={() => setEditMode(false)} disabled={loading}>
+                      <Button color="outline-secondary" onClick={() => setEditMode(false)} disabled={isLoading}>
                         <X size={16} className="me-1" />
                         Cancel
                       </Button>
@@ -595,11 +584,11 @@ const {
           </div>
         </ModalBody>
         <ModalFooter>
-          <Button color="secondary" onClick={() => setOtpModal(false)} disabled={loading}>
+          <Button color="secondary" onClick={() => setOtpModal(false)} disabled={isLoading}>
             Cancel
           </Button>
-          <Button color="primary" onClick={handleVerifyOtp} disabled={loading || otp.length !== 4}>
-            {loading ? (
+          <Button color="primary" onClick={handleVerifyOtp} disabled={isLoading || otp.length !== 4}>
+            {isLoading ? (
               <>
                 <span className="spinner-border spinner-border-sm me-1" />
                 Verifying...
@@ -667,11 +656,11 @@ const {
           </FormGroup>
         </ModalBody>
         <ModalFooter>
-          <Button color="secondary" onClick={() => setShowPasswordUpdate(false)} disabled={passwordLoading}>
+          <Button color="secondary" onClick={() => setShowPasswordUpdate(false)} disabled={updatePasswordLoading}>
             Cancel
           </Button>
-          <Button color="primary" type="submit" disabled={passwordLoading}>
-            {passwordLoading ? (
+          <Button color="primary" type="submit" disabled={updatePasswordLoading}>
+            {updatePasswordLoading ? (
               <>
                 <span className="spinner-border spinner-border-sm me-1" />
                 Updating...

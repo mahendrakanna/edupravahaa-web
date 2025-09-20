@@ -64,8 +64,9 @@ const Calendar = props => {
     eventClick({ event }) {
       const isCompleted = event.extendedProps.completed
       if (isCompleted) return
-      console.log('Event clicked:', event)
-      navigate(`/live-class/${event.extendedProps.sessionId}`)
+      const sessionId = event.extendedProps.sessionId
+      const url = sessionId ? `/live-class/landing/${sessionId}` : `/live-class/landing`
+      window.open(`${window.location.origin}${url}`, '_blank', 'noopener,noreferrer')
     },
 
     eventDidMount(info) {

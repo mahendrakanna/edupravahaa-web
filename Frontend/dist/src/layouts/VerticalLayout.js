@@ -11,7 +11,7 @@ import { useSelector } from 'react-redux'
 
 const VerticalLayout = props => {
   const userRole = useSelector(state => state.auth.user?.role)
-  const enrolled = useSelector(state => state.auth.user)
+  const enrolled = useSelector(state => state.auth.user?.has_purchased)
 
   // const [menuData, setMenuData] = useState([])
 
@@ -21,7 +21,7 @@ const VerticalLayout = props => {
   // }, [])
   console.log('userRole',enrolled)
   const filteredMenuData = navigation
-  .filter(item => !item.roles || item.roles.includes(userRole))
+  .filter(item => !item?.roles || item?.roles.includes(userRole))
   .map(item => {
     if (userRole === 'student' && enrolled === false) {
       // Only enable 'courses' tab, disable others
@@ -32,7 +32,7 @@ const VerticalLayout = props => {
     }
     return { ...item, disabled: false }
   })
-  console.log('filteredMenuData',filteredMenuData,"enrolled",enrolled)
+  // console.log('filteredMenuData',filteredMenuData,"enrolled",enrolled)
   return (
     <Layout menuData={filteredMenuData} {...props}>
       <Outlet />

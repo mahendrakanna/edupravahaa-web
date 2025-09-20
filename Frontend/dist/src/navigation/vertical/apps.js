@@ -1,5 +1,5 @@
 // ** Icons Import
-import { Mail, MessageSquare, CheckSquare, Calendar, FileText, Circle, ShoppingCart, User, Shield, Home } from 'react-feather'
+import { Mail, MessageSquare, CheckSquare, Calendar, FileText, Circle, ShoppingCart, User, Shield, Home, Video } from 'react-feather'
 
 export default [
   // {
@@ -47,6 +47,13 @@ export default [
     navLink: '/calendar',
     roles: ['student', 'teacher']
   },
+  {
+    id: 'recordedvideos',
+    title: 'Recorded Classes',
+    icon: <Video size={20} />,
+    navLink: '/recordedvideos',
+    roles: ['student', 'teacher']
+  }
 
   //   {
   //   id: 'courses',

@@ -24,16 +24,19 @@ def validate_identifier_utility(value, identifier_type=None):
             identifier_type = 'phone'
         else:
             raise serializers.ValidationError({
-                'error': 'Invalid identifier. Must be a valid email or phone number (10-15 digits).'
+                'message': 'Invalid identifier. Must be a valid email or phone number (10-15 digits).',
+                'message_type': 'error'
             })
     else:
         if identifier_type == 'email' and not re.match(r'^[\w\.-]+@[\w\.-]+\.\w+$', value):
             raise serializers.ValidationError({
-                'error': 'Invalid email format.'
+                'message': 'Invalid email format.',
+                'message_type': 'error'
             })
         elif identifier_type == 'phone' and not re.match(r'^\+?\d{10,15}$', value):
             raise serializers.ValidationError({
-                'error': 'Invalid phone number. Must be 10-15 digits, optionally starting with +.'
+                'message': 'Invalid phone number. Must be 10-15 digits, optionally starting with +.',
+                'message_type': 'error'
             })
     return value, identifier_type
 
@@ -41,11 +44,13 @@ def validate_identifier_utility(value, identifier_type=None):
 def check_user_existence_utility(email=None, phone_number=None):
     if email and User.objects.filter(email=email).exists():
         raise serializers.ValidationError({
-            'error': 'This email is already registered.'
+            'message': 'This email is already registered.',
+            'message_type': 'error'
         })
     if phone_number and User.objects.filter(phone_number=phone_number).exists():
         raise serializers.ValidationError({
-            'error': 'This phone number is already registered.'
+            'message': 'This phone number is already registered.',
+            'message_type': 'error'
         })
 
 class StudentProfileSerializer(serializers.ModelSerializer):
@@ -63,12 +68,14 @@ class StudentProfileSerializer(serializers.ModelSerializer):
             max_size = 5 * 1024 * 1024  # 5MB
             if value.size > max_size:
                 raise serializers.ValidationError({
-                    'error': 'Profile picture size must be less than 5MB.'
+                    'message': 'Profile picture size must be less than 5MB.',
+                    'message_type': 'error'
                 })
             valid_types = ['image/jpeg', 'image/png', 'image/gif']
             if value.content_type not in valid_types:
                 raise serializers.ValidationError({
-                    'error': 'Profile picture must be JPEG, PNG, or GIF.'
+                    'message': 'Profile picture must be JPEG, PNG, or GIF.',
+                    'message_type': 'error'
                 })
         return value
 
@@ -99,7 +106,7 @@ class StudentProfileSerializer(serializers.ModelSerializer):
                 representation['trial_remaining_seconds'] = user.trial_remaining_seconds
             return representation
         
-        # When not nested, construct the full response structure
+        # When not nested, return profile data without message/message_type (handled in view)
         data = {
             'id': user.id,
             'username': user.username,
@@ -114,13 +121,7 @@ class StudentProfileSerializer(serializers.ModelSerializer):
             'profile_picture': profile_data.get('profile_picture'),
             'has_purchased': self.get_has_purchased(instance)
         }
-        
-        # Construct the final response structure
-        return {
-            'message': 'Profile retrieved successfully.',
-            'message_type': 'success',
-            'data': data
-        }
+        return data
 
 class TeacherProfileSerializer(serializers.ModelSerializer):
     """Serializes teacher profile data."""
@@ -136,7 +137,8 @@ class TeacherProfileSerializer(serializers.ModelSerializer):
         """Ensures experience years are within valid range."""
         if value < 0 or value > 50:
             raise serializers.ValidationError({
-                'error': 'Experience years must be between 0 and 50.'
+                'message': 'Experience years must be between 0 and 50.',
+                'message_type': 'error'
             })
         return value
 
@@ -144,7 +146,8 @@ class TeacherProfileSerializer(serializers.ModelSerializer):
         """Ensures specialization is a non-empty list."""
         if not isinstance(value, list) or not value:
             raise serializers.ValidationError({
-                'error': 'Specialization must be a non-empty list of subjects.'
+                'message': 'Specialization must be a non-empty list of subjects.',
+                'message_type': 'error'
             })
         return value
 
@@ -152,7 +155,8 @@ class TeacherProfileSerializer(serializers.ModelSerializer):
         """Ensures teaching languages is a list."""
         if not isinstance(value, list):
             raise serializers.ValidationError({
-                'error': 'Teaching languages must be a list.'
+                'message': 'Teaching languages must be a list.',
+                'message_type': 'error'
             })
         return value
 
@@ -160,7 +164,8 @@ class TeacherProfileSerializer(serializers.ModelSerializer):
         """Ensures LinkedIn URL is valid if provided."""
         if value and not re.match(r'^https?://(www\.)?linkedin\.com/.*$', value):
             raise serializers.ValidationError({
-                'error': 'Invalid LinkedIn URL.'
+                'message': 'Invalid LinkedIn URL.',
+                'message_type': 'error'
             })
         return value
 
@@ -207,13 +212,7 @@ class TeacherProfileSerializer(serializers.ModelSerializer):
             'is_verified': profile_data.get('is_verified'),
             'teaching_languages': profile_data.get('teaching_languages')
         }
-        
-        # Construct the final response structure
-        return {
-            'message': 'Profile retrieved successfully.',
-            'message_type': 'success',
-            'data': data
-        }
+        return data
 
 class UserSerializer(serializers.ModelSerializer):
     """Serializes basic user data for retrieval and updates."""
@@ -249,7 +248,8 @@ class UserSerializer(serializers.ModelSerializer):
         except Exception as e:
             logger.error(f"Error serializing profile for user {obj.id}: {str(e)}")
             raise serializers.ValidationError({
-                'error': f'Failed to serialize profile: {str(e)}'
+                'message': f'Failed to serialize profile: {str(e)}',
+                'message_type': 'error'
             })
 
 
@@ -277,7 +277,8 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
         """Ensures username is unique."""
         if User.objects.filter(username=value).exclude(id=self.instance.id).exists():
             raise serializers.ValidationError({
-                'error': 'This username is already taken.'
+                'message': 'This username is already taken.',
+                'message_type': 'error'
             })
         return value
 
@@ -285,15 +286,16 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
         """Ensures password meets security requirements."""
         if len(value) < 8:
             raise serializers.ValidationError({
-                'error': 'Password must be at least 8 characters long.'
+                'message': 'Password must be at least 8 characters long.',
+                'message_type': 'error'
             })
         return value
 
     def validate(self, attrs):
-        """Ensures only allowed fields are included in the request and validates OTP for phone updates."""
+        """Ensures only allowed fields are included in the request and validates phone update payload."""
         request = self.context.get('request')
         user = request.user
-        allowed_fields = {'username', 'phone_number', 'password', 'identifier', 'otp_code', 'purpose'}
+        allowed_fields = {'username', 'password', 'identifier', 'otp_code', 'purpose'}
         
         if user.is_student:
             # Use set union for clarity
@@ -313,14 +315,22 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
         
         if invalid_fields:
             raise serializers.ValidationError({
-                'error': f'Cannot update restricted fields: {", ".join(invalid_fields)}'
+                'message': f'Cannot update restricted fields: {", ".join(invalid_fields)}',
+                'message_type': 'error'
             })
         
-        # Ensure identifier, otp_code, and purpose are provided for phone number updates
-        if 'phone_number' in request.data:
-            if not all(key in request.data for key in ['identifier', 'otp_code', 'purpose']):
+        # Check for phone number update payload
+        if 'identifier' in request.data or 'otp_code' in request.data or 'purpose' in request.data:
+            expected_fields = {'identifier', 'otp_code', 'purpose'}
+            if set(request_data_keys) != expected_fields:
                 raise serializers.ValidationError({
-                    'error': 'Must provide identifier, otp_code, and purpose for phone number updates.'
+                    'message': 'Phone number update requires only identifier, otp_code, and purpose fields.',
+                    'message_type': 'error'
+                })
+            if not all(key in request.data for key in expected_fields):
+                raise serializers.ValidationError({
+                    'message': 'Must provide identifier, otp_code, and purpose for phone number updates.',
+                    'message_type': 'error'
                 })
         
         return attrs
@@ -338,8 +348,7 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
             return None
         except Exception as e:
             logger.error(f"Error serializing profile for user {obj.id}: {str(e)}")
-            # Don't raise ValidationError here (avoids 500 in response); return safe value
-            return {'error': 'Profile data unavailable'}
+            return {'message': 'Profile data unavailable', 'message_type': 'error'}
 
     def update(self, instance, validated_data):
         """Handles partial update of user and profile data."""
@@ -351,6 +360,10 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
         otp_code = validated_data.pop('otp_code', None)
         purpose = validated_data.pop('purpose', None)
         
+        # Track whether phone update was successful
+        phone_update_success = True
+        phone_update_error = None
+
         # Update user fields (username, password)
         for attr, value in validated_data.items():
             if attr == 'password':
@@ -397,41 +410,35 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
                     # Directly set files on instance (handles ImageField save)
                     for field, file_obj in profile_files.items():
                         setattr(student_profile, field, file_obj)
-                        # Optional: Basic image validation (requires Pillow)
-                        # from PIL import Image
-                        # try:
-                        #     Image.open(file_obj).verify()
-                        # except:
-                        #     raise serializers.ValidationError({'error': f'Invalid image for {field}'})
                         student_profile.save(update_fields=[field])
                     
                     logger.debug("Student profile updated successfully")
                 except StudentProfile.DoesNotExist:
                     raise serializers.ValidationError({
-                        'error': 'Student profile not found.'
+                        'message': 'Student profile not found.',
+                        'message_type': 'error'
                     })
                 except Exception as e:
                     logger.error(f"Profile update error for user {instance.id}: {str(e)}")
                     raise serializers.ValidationError({
-                        'error': f'Failed to update profile: {str(e)}'
+                        'message': f'Failed to update profile: {str(e)}',
+                        'message_type': 'error'
                     })
 
-        # Update phone number with OTP verification for both students and teachers
-        if 'phone_number' in request.data and identifier and otp_code and purpose:
+        # Update phone number with OTP verification
+        if identifier and otp_code and purpose:
             try:
-                phone_data = {
-                    'identifier': identifier,
-                    'otp_code': otp_code,
-                    'purpose': purpose
-                }
                 identifier_type = 'phone'
                 identifier, identifier_type = validate_identifier_utility(identifier, identifier_type)
-
+                
                 # Check if phone number already exists
                 if User.objects.filter(phone_number=identifier).exclude(id=instance.id).exists():
-                    raise serializers.ValidationError({
-                        'error': 'This phone number is already registered.'
-                    })
+                    phone_update_success = False
+                    phone_update_error = {
+                        'message': 'This phone number is already registered.',
+                        'message_type': 'error'
+                    }
+                    raise serializers.ValidationError(phone_update_error)
 
                 # Verify OTP
                 otp = OTP.objects.filter(
@@ -442,13 +449,19 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
                 ).order_by('-created_at').first()
 
                 if not otp:
-                    raise serializers.ValidationError({
-                        'error': 'Invalid OTP.'
-                    })
+                    phone_update_success = False
+                    phone_update_error = {
+                        'message': 'Invalid OTP.',
+                        'message_type': 'error'
+                    }
+                    raise serializers.ValidationError(phone_update_error)
                 if otp.is_expired:
-                    raise serializers.ValidationError({
-                        'error': 'OTP has expired.'
-                    })
+                    phone_update_success = False
+                    phone_update_error = {
+                        'message': 'OTP has expired.',
+                        'message_type': 'error'
+                    }
+                    raise serializers.ValidationError(phone_update_error)
 
                 # Update phone number
                 instance.phone_number = identifier
@@ -464,12 +477,19 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
                     purpose=purpose
                 ).delete()
 
+            except serializers.ValidationError as e:
+                raise
             except Exception as e:
-                logger.error(f"Phone number update error: {str(e)}")
-                raise serializers.ValidationError({
-                    'error': f'Failed to update phone number: {str(e)}'
-                })
+                phone_update_success = False
+                phone_update_error = {
+                    'message': f'Failed to update phone number: {str(e)}',
+                    'message_type': 'error'
+                }
+                raise serializers.ValidationError(phone_update_error)
 
+        # Store phone update status in instance for view to check
+        instance.phone_update_success = phone_update_success
+        instance.phone_update_error = phone_update_error
         return instance
 
 
@@ -485,7 +505,8 @@ class RegisterSerializer(serializers.Serializer):
         """Ensures email is not already registered."""
         if User.objects.filter(email=value).exists():
             raise serializers.ValidationError({
-                'error': 'This email is already registered.'
+                'message': 'This email is already registered.',
+                'message_type': 'error'
             })
         return value
     
@@ -493,11 +514,13 @@ class RegisterSerializer(serializers.Serializer):
         """Ensures phone number is valid and not already registered."""
         if not re.match(r'^\+?\d{10,15}$', value):
             raise serializers.ValidationError({
-                'error': 'Invalid phone number. Must be 10-15 digits, optionally starting with +.'
+                'message': 'Invalid phone number. Must be 10-15 digits, optionally starting with +.',
+                'message_type': 'error'
             })
         if User.objects.filter(phone_number=value).exists():
             raise serializers.ValidationError({
-                'error': 'This phone number is already registered.'
+                'message': 'This phone number is already registered.',
+                'message_type': 'error'
             })
         return value
     
@@ -505,7 +528,8 @@ class RegisterSerializer(serializers.Serializer):
         """Verifies email and phone OTPs and password match."""
         if attrs['password'] != attrs['confirm_password']:
             raise serializers.ValidationError({
-                'error': 'Passwords do not match.'
+                'message': 'Passwords do not match.',
+                'message_type': 'error'
             })
         
         email = attrs['email']
@@ -520,7 +544,8 @@ class RegisterSerializer(serializers.Serializer):
             expires_at__gt=timezone.now()
         ).exists():
             raise serializers.ValidationError({
-                'error': 'Email OTP not verified or expired.'
+                'message': 'Email OTP not verified or expired.',
+                'message_type': 'error'
             })
 
         if not OTP.objects.filter(
@@ -531,7 +556,8 @@ class RegisterSerializer(serializers.Serializer):
             expires_at__gt=timezone.now()
         ).exists():
             raise serializers.ValidationError({
-                'error': 'Phone OTP not verified or expired.'
+                'message': 'Phone OTP not verified or expired.',
+                'message_type': 'error'
             })
 
         return attrs
@@ -586,22 +612,32 @@ class TeacherCourseAssignmentSerializer(serializers.Serializer):
     def validate_course_id(self, value):
         """Ensures the course exists and is active."""
         try:
-            course = Course.objects.get(id=value, is_active=True)
+            Course.objects.get(id=value, is_active=True)
             return value
         except Course.DoesNotExist:
-            raise serializers.ValidationError({"error": f"Course with ID {value} not found or inactive."})
+            raise serializers.ValidationError({
+                'message': f'Course with ID {value} not found or inactive.',
+                'message_type': 'error'
+            })
 
     def validate_batches(self, value):
         """Validates batch choices and ensures no duplicates within this assignment."""
         valid_batches = ['weekdays', 'weekends']
         if not all(batch in valid_batches for batch in value):
             raise serializers.ValidationError({
-                'error': f"Batches must be one or more of: {', '.join(valid_batches)}."
+                'message': f'Batches must be one or more of: {", ".join(valid_batches)}.',
+                'message_type': 'error'
             })
         if len(value) != len(set(value)):
-            raise serializers.ValidationError({"error": "Duplicate batches are not allowed in the same assignment."})
+            raise serializers.ValidationError({
+                'message': 'Duplicate batches are not allowed in the same assignment.',
+                'message_type': 'error'
+            })
         if len(value) > 2:
-            raise serializers.ValidationError({"error": "At most two batches (weekdays, weekends) can be assigned per course during creation."})
+            raise serializers.ValidationError({
+                'message': 'At most two batches (weekdays, weekends) can be assigned per course during creation.',
+                'message_type': 'error'
+            })
         return value
 
     def validate(self, attrs):
@@ -613,7 +649,7 @@ class TeacherCourseAssignmentSerializer(serializers.Serializer):
             required_fields = ['weekdays_start_date', 'weekdays_end_date', 'weekdays_start', 'weekdays_end']
             for field in required_fields:
                 if field not in attrs or not attrs[field]:
-                    errors[field] = f"{field} is required for 'weekdays' batch."
+                    errors[field] = f"{field.replace('_', ' ').title()} is required for 'weekdays' batch."
             if 'weekdays_start_date' in attrs and 'weekdays_end_date' in attrs:
                 if attrs['weekdays_start_date'] > attrs['weekdays_end_date']:
                     errors['weekdays_end_date'] = "End date must be after start date."
@@ -626,7 +662,7 @@ class TeacherCourseAssignmentSerializer(serializers.Serializer):
             required_fields = ['weekend_start_date', 'weekend_end_date']
             for field in required_fields:
                 if field not in attrs or not attrs[field]:
-                    errors[field] = f"{field} is required for 'weekends' batch."
+                    errors[field] = f"{field.replace('_', ' ').title()} is required for 'weekends' batch."
             if 'weekend_start_date' in attrs and 'weekend_end_date' in attrs:
                 if attrs['weekend_start_date'] > attrs['weekend_end_date']:
                     errors['weekend_end_date'] = "End date must be after start date."
@@ -636,7 +672,11 @@ class TeacherCourseAssignmentSerializer(serializers.Serializer):
                 errors['weekend_times'] = "At least Saturday or Sunday timings must be provided."
 
         if errors:
-            raise serializers.ValidationError(errors)
+            raise serializers.ValidationError({
+                'message': 'Validation failed for course assignment.',
+                'message_type': 'error',
+                'details': errors
+            })
 
         return attrs
 
@@ -655,7 +695,8 @@ class TeacherCourseAssignmentSerializer(serializers.Serializer):
                     raise ValueError("End time must be after start time.")
             except ValueError as e:
                 raise serializers.ValidationError({
-                    'error': f"Invalid time format or logic for {schedule['type']}: {str(e)}."
+                    'message': f"Invalid time format or logic for {schedule['type']}: {str(e)}.",
+                    'message_type': 'error'
                 })
 
             current_date = start_date
@@ -672,7 +713,8 @@ class TeacherCourseAssignmentSerializer(serializers.Serializer):
                     if overlapping_sessions.exists():
                         conflict_session = overlapping_sessions.first()
                         raise serializers.ValidationError({
-                            'error': f"Teacher has a conflicting session on {current_date.strftime('%Y-%m-%d')} from {start_time_str} to {end_time_str} (existing: {conflict_session.start_time} to {conflict_session.end_time}). Timing must differ on the same date."
+                            'message': f"Teacher has a conflicting session on {current_date.strftime('%Y-%m-%d')} from {start_time_str} to {end_time_str} (existing: {conflict_session.start_time} to {conflict_session.end_time}). Timing must differ on the same date.",
+                            'message_type': 'error'
                         })
                 current_date += timedelta(days=1)
 
@@ -698,10 +740,14 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
         logger.debug(f"Validating email: {value}")
         if not value.strip():
             raise serializers.ValidationError({
-                'error': 'Email is required and cannot be blank.'
+                'message': 'Email is required and cannot be blank.',
+                'message_type': 'error'
             })
         if User.objects.filter(email=value).exists():
-            raise serializers.ValidationError({"error": "Email is already in use."})
+            raise serializers.ValidationError({
+                'message': 'Email is already in use.',
+                'message_type': 'error'
+            })
         return value
 
     def validate_phone(self, value):
@@ -709,18 +755,27 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
         logger.debug(f"Validating phone: {value}")
         value, _ = validate_identifier_utility(value, 'phone')
         if User.objects.filter(phone_number=value).exists():
-            raise serializers.ValidationError({"error": "Phone number is already in use."})
+            raise serializers.ValidationError({
+                'message': 'Phone number is already in use.',
+                'message_type': 'error'
+            })
         return value
 
     def validate(self, attrs):
         """Ensures passwords match."""
         logger.debug(f"Validating attrs: {attrs}")
         if attrs['password'] != attrs['confirm_password']:
-            raise serializers.ValidationError({"error": "Passwords do not match."})
+            raise serializers.ValidationError({
+                'message': 'Passwords do not match.',
+                'message_type': 'error'
+            })
 
         course_ids = [assignment['course_id'] for assignment in attrs.get('course_assignments', [])]
         if len(course_ids) != len(set(course_ids)):
-            raise serializers.ValidationError({"error": "Duplicate course assignments are not allowed."})
+            raise serializers.ValidationError({
+                'message': 'Duplicate course assignments are not allowed.',
+                'message_type': 'error'
+            })
 
         return attrs
 
@@ -895,8 +950,10 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
             logger.error(f"Error creating teacher: {str(e)}")
             if 'user' in locals():
                 user.delete()
-            raise serializers.ValidationError({"error": f"Failed to create teacher: {str(e)}"})
-
+            raise serializers.ValidationError({
+                'message': f'Failed to create teacher: {str(e)}',
+                'message_type': 'error'
+            })
 
 class AdminCreateSerializer(serializers.ModelSerializer):
     """Handles admin user creation by any user."""
@@ -915,7 +972,8 @@ class AdminCreateSerializer(serializers.ModelSerializer):
         """Ensures username is not blank."""
         if not value.strip():
             raise serializers.ValidationError({
-                'error': 'Username is required and cannot be blank.'
+                'message': 'Username is required and cannot be blank.',
+                'message_type': 'error'
             })
         return value
     
@@ -923,11 +981,13 @@ class AdminCreateSerializer(serializers.ModelSerializer):
         """Ensures email is not blank and not already registered."""
         if not value.strip():
             raise serializers.ValidationError({
-                'error': 'Email is required and cannot be blank.'
+                'message': 'Email is required and cannot be blank.',
+                'message_type': 'error'
             })
         if User.objects.filter(email=value).exists():
             raise serializers.ValidationError({
-                'error': 'This email is already registered.'
+                'message': 'This email is already registered.',
+                'message_type': 'error'
             })
         return value
     
@@ -937,7 +997,8 @@ class AdminCreateSerializer(serializers.ModelSerializer):
             value, _ = validate_identifier_utility(value, 'phone')
             if User.objects.filter(phone_number=value).exists():
                 raise serializers.ValidationError({
-                    'error': 'This phone number is already registered.'
+                    'message': 'This phone number is already registered.',
+                    'message_type': 'error'
                 })
         return value
     
@@ -949,7 +1010,8 @@ class AdminCreateSerializer(serializers.ModelSerializer):
         """Ensures passwords match."""
         if attrs['password'] != attrs['confirm_password']:
             raise serializers.ValidationError({
-                'error': 'Passwords do not match.'
+                'message': 'Passwords do not match.',
+                'message_type': 'error'
             })
         return attrs
     
@@ -993,13 +1055,7 @@ class ChangePasswordSerializer(serializers.Serializer):
                 'message': 'New password cannot be empty.',
                 'message_type': 'error'
             })
-        try:
-            return value
-        except Exception as e:
-            raise serializers.ValidationError({
-                'message': str(e) if str(e) else 'New password does not meet complexity requirements.',
-                'message_type': 'error'
-            })
+        return value
     
     def validate_confirm_password(self, value):
         """Ensures confirm password is not empty."""
@@ -1014,7 +1070,8 @@ class ChangePasswordSerializer(serializers.Serializer):
         """Ensures new password and confirm password match."""
         if attrs['new_password'] != attrs['confirm_password']:
             raise serializers.ValidationError({
-                'error': 'New passwords do not match.'
+                'message': 'New passwords do not match.',
+                'message_type': 'error'
             })
         return attrs
     
@@ -1044,7 +1101,8 @@ class LoginSerializer(serializers.Serializer):
         
         if not identifier or not password:
             raise serializers.ValidationError({
-                'error': 'Must include "identifier" and "password".'
+                'message': 'Must include "identifier" and "password".',
+                'message_type': 'error'
             })
 
         user = None
@@ -1053,17 +1111,20 @@ class LoginSerializer(serializers.Serializer):
             user = authenticate(username=user_obj.email, password=password)
         except User.DoesNotExist:
             raise serializers.ValidationError({
-                'error': 'Invalid identifier. Please provide a valid email, phone number, or username.'
+                'message': 'Invalid identifier. Please provide a valid email, phone number, or username.',
+                'message_type': 'error'
             })
 
         if not user:
             raise serializers.ValidationError({
-                'error': 'Invalid credentials.'
+                'message': 'Invalid credentials.',
+                'message_type': 'error'
             })
         
         if not user.is_active:
             raise serializers.ValidationError({
-                'error': 'User account is disabled.'
+                'message': 'User account is disabled.',
+                'message_type': 'error'
             })
         
         attrs['user'] = user
@@ -1092,20 +1153,24 @@ class SendOTPSerializer(serializers.Serializer):
         if purpose == 'password_reset':
             if identifier_type == 'email' and not User.objects.filter(email=identifier).exists():
                 raise serializers.ValidationError({
-                    'error': 'No user found with this email address.'
+                    'message': 'No user found with this email address.',
+                    'message_type': 'error'
                 })
             elif identifier_type == 'phone' and not User.objects.filter(phone_number=identifier).exists():
                 raise serializers.ValidationError({
-                    'error': 'No user found with this phone number.'
+                    'message': 'No user found with this phone number.',
+                    'message_type': 'error'
                 })
         elif purpose == 'registration':
             if identifier_type == 'email' and User.objects.filter(email=identifier).exists():
                 raise serializers.ValidationError({
-                    'error': 'This email is already registered.'
+                    'message': 'This email is already registered.',
+                    'message_type': 'error'
                 })
             elif identifier_type == 'phone' and User.objects.filter(phone_number=identifier).exists():
                 raise serializers.ValidationError({
-                    'error': 'This phone number is already registered.'
+                    'message': 'This phone number is already registered.',
+                    'message_type': 'error'
                 })
         
         return attrs
@@ -1141,11 +1206,13 @@ class VerifyOTPSerializer(serializers.Serializer):
         
         if not otp:
             raise serializers.ValidationError({
-                'error': 'Invalid OTP.'
+                'message': 'Invalid OTP.',
+                'message_type': 'error'
             })
         if otp.is_expired:
             raise serializers.ValidationError({
-                'error': 'OTP has expired.'
+                'message': 'OTP has expired.',
+                'message_type': 'error'
             })
         
         attrs['otp'] = otp
@@ -1172,7 +1239,8 @@ class ForgotPasswordSerializer(serializers.Serializer):
         """Verifies passwords match and OTP is valid."""
         if attrs['new_password'] != attrs['confirm_password']:
             raise serializers.ValidationError({
-                'error': 'Passwords do not match.'
+                'message': 'Passwords do not match.',
+                'message_type': 'error'
             })
         
         identifier = attrs['identifier']
@@ -1190,7 +1258,8 @@ class ForgotPasswordSerializer(serializers.Serializer):
                 user = User.objects.get(phone_number=identifier)
         except User.DoesNotExist:
             raise serializers.ValidationError({
-                'error': 'No user found with this identifier.'
+                'message': 'No user found with this identifier.',
+                'message_type': 'error'
             })
         
         # Verify OTP
@@ -1203,11 +1272,13 @@ class ForgotPasswordSerializer(serializers.Serializer):
         
         if not otp:
             raise serializers.ValidationError({
-                'error': 'Invalid OTP.'
+                'message': 'Invalid OTP.',
+                'message_type': 'error'
             })
         if otp.is_expired:
             raise serializers.ValidationError({
-                'error': 'OTP has expired.'
+                'message': 'OTP has expired.',
+                'message_type': 'error'
             })
         
         attrs['user'] = user
@@ -1228,5 +1299,3 @@ class ForgotPasswordSerializer(serializers.Serializer):
             purpose='password_reset'
         ).delete()
         return user
-
-
