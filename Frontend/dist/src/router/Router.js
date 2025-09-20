@@ -29,9 +29,10 @@
     const allRoutes = getRoutes(layout)
     const getHomeRoute = () => {
       const user = getUserData()
-      console.log('User kava:', user?.data)
       if (user) {
-        return getHomeRouteForLoggedInUser(user.role)
+        // Prefer user_type (shape saved on login), fallback to role if present
+        const roleOrType = user.user_type || user.role
+        return getHomeRouteForLoggedInUser(roleOrType)
       } else {
         return '/login'
       }

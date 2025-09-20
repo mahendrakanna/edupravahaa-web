@@ -9,6 +9,30 @@ const api = axios.create({
   baseURL: API_URL,
 });
 
+// Track in-flight requests to allow UI to gate actions until idle
+let inflightCount = 0;
+const listeners = new Set();
+
+const notify = () => {
+  listeners.forEach((l) => {
+    try { l(inflightCount); } catch (_) { /* noop */ }
+  });
+};
+
+api.isIdle = () => inflightCount === 0;
+api.subscribeInflight = (listener) => {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+};
+
+api.interceptors.request.use((config) => {
+  inflightCount += 1;
+  notify();
+  return config;
+}, (error) => {
+  return Promise.reject(error);
+});
+
 let isRefreshing = false;
 let failedQueue = [];
 
@@ -24,8 +48,14 @@ const processQueue = (error, token = null) => {
 };
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    inflightCount = Math.max(0, inflightCount - 1);
+    notify();
+    return response;
+  },
   async (error) => {
+    inflightCount = Math.max(0, inflightCount - 1);
+    notify();
     const originalRequest = error.config;
 
     // console.log("Interceptor - Error status:", error.response?.status, "URL:", error.config?.url);

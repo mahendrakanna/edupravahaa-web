@@ -31,7 +31,7 @@ const NavbarUser = props => {
           <ThemeToggler />
         </NavLink>
       </NavItem>
-      <NavbarSearch />
+      {/* <NavbarSearch /> */}
       {/* <CartDropdown /> */}
       {/* <NotificationDropdown /> */}
       <UserDropdown />

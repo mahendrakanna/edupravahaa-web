@@ -153,7 +153,7 @@ export const updatePassword = createAsyncThunk(
   async (payload, { rejectWithValue, getState }) => {
     try {
       const token = getState().auth.token;
-      const response = await api.put(apiList.auth.updatePassword, payload, {
+      const response = await api.post(apiList.auth.updatePassword, payload, {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
@@ -261,6 +261,8 @@ const authSlice = createSlice({
       // console.log("Login successful:", action.payload);
 
       state.loading = false;
+      state.success = true;
+      state.error = null;
 
       // ✅ Save tokens properly
       state.token = action.payload.data.access;
@@ -282,6 +284,7 @@ const authSlice = createSlice({
 
     builder.addCase(loginUser.rejected, (state, action) => {
       state.loading = false;
+      state.success = false;
       state.error = action.payload;
     });
 
@@ -397,8 +400,6 @@ const authSlice = createSlice({
   })
   builder.addCase(updateProfile.fulfilled, (state, action) => {
     state.loading = false
-    state.user = action.payload.data 
-    localStorage.setItem('userData', JSON.stringify(action.payload.data))
   })
   builder.addCase(updateProfile.rejected, (state, action) => {
     state.loading = false

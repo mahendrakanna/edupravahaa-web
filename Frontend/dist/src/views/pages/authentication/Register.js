@@ -5,6 +5,7 @@ import { Link, useNavigate } from 'react-router-dom'
 // ** Custom Hooks
 import { useSkin } from '@hooks/useSkin'
 import useJwt from '@src/auth/jwt/useJwt'
+import { useApiWithToast } from '@src/utility/hooks/useApiWithToast'
 
 // ** Store & Actions
 import { useDispatch, useSelector } from 'react-redux'
@@ -42,6 +43,7 @@ import illustrationsDark from '@src/assets/images/pages/register-v2-dark.svg'
 import '@styles/react/pages/page-authentication.scss'
 import {  sendOtp,signupUser,verifyOtp } from '../../../redux/authentication'
 import toast from 'react-hot-toast'
+import UILoader from '@src/@core/components/ui-loader'
 
 const defaultValues = {
   email: '',
@@ -75,9 +77,35 @@ const Register = () => {
   const [otpSentSuccess, setOtpSentSuccess] = useState(false);
   const { loading } = useSelector(state => state.auth)
 
-  console.log("errors", errors)
+  
 
   const source = skin === 'dark' ? illustrationsDark : illustrationsLight
+
+  // ** API hooks with toast
+  const { execute: executeSignup, loading: signupLoading } = useApiWithToast(signupUser, {
+    onSuccess: (result) => {
+      navigate('/login')
+    }
+  })
+
+  const { execute: executeSendOtp, loading: sendOtpLoading } = useApiWithToast(sendOtp, {
+    onSuccess: (result) => {
+      setOtpSentSuccess(true)
+    }
+  })
+
+  const { execute: executeVerifyOtp, loading: verifyOtpLoading } = useApiWithToast(verifyOtp, {
+    onSuccess: (result) => {
+      if (otpType === "email") setIsEmailVerified(true)
+      if (otpType === "phone") setIsPhoneVerified(true)
+      
+      // Reset OTP state
+      setOtp("")
+      setOtpType("")
+      setOtpValue("")
+      setOtpSentSuccess(false)
+    }
+  })
 
   const watchedEmail = watch("email")
   const watchedPhone = watch("phone")
@@ -106,13 +134,7 @@ const isPhoneValid = phonePattern.test(watchedPhone)
         confirm_password: data.confirmpassword,
         phone_number: `+91${data?.phone}`,
       }
-      dispatch(signupUser(payload))
-      .unwrap()
-      .then((res) => {
-      toast.success(res.message || "Registration successful");
-        navigate('/login')
-      })
-      .catch(err => console.log(err))
+      executeSignup(payload)
     } else {
       for (const key in data) {
         if (data[key].length === 0) {
@@ -146,17 +168,7 @@ const isPhoneValid = phonePattern.test(watchedPhone)
     };
     setOtpType(type);
     setOtpValue(value);
-    dispatch(sendOtp(payload))
-    .unwrap()
-    .then(res => {
-      // Show OTP sent message from backend
-      toast.success(res.message || `OTP sent to your ${type}`)
-      setOtpSentSuccess(true)
-    })
-    .catch(err => {
-      toast.error(err.error || `Failed to send OTP`)
-      setOtpSentSuccess(false)
-    })
+    executeSendOtp(payload)
   };
 
   const handleVerifyOtp = () => {
@@ -171,29 +183,13 @@ const isPhoneValid = phonePattern.test(watchedPhone)
     otp_code: otp,
     purpose: "registration",
   }
-  dispatch(verifyOtp(payload))
-    .unwrap()
-    .then(res => {
-      // Show success message from backend
-      toast.success(res.message || `${otpType} verified successfully`)
-
-      if (otpType === "email") setIsEmailVerified(true)
-      if (otpType === "phone") setIsPhoneVerified(true)
-
-      // Reset OTP state
-      setOtp("")
-      setOtpType("")
-      setOtpValue("")
-      setOtpSentSuccess(false)
-    })
-    .catch(err => {
-      // Show error
-      toast.error(err.error || "Invalid OTP")
-    })
+  executeVerifyOtp(payload)
   }
-  console.log("loading:", loading)
+  const isLoading = loading || signupLoading || sendOtpLoading || verifyOtpLoading
+  
   return (
- <div className="auth-wrapper auth-cover">
+    <UILoader blocking={isLoading}>
+      <div className="auth-wrapper auth-cover">
       <Row className="auth-inner m-0">
         <Col className="d-none d-lg-flex align-items-center p-5" lg="8" sm="12">
           <div className="w-100 d-lg-flex align-items-center justify-content-center px-5">
@@ -262,11 +258,11 @@ const isPhoneValid = phonePattern.test(watchedPhone)
                 <Button
                     type="button"
                     color="link"
-                    disabled={!isEmailValid || loading}
+                    disabled={!isEmailValid || sendOtpLoading}
                     className="position-absolute top-50 end-0 translate-middle-y me-1"
                     onClick={() => handleSendOtp("email", watchedEmail)}
                   >
-                    {loading ? <Spinner size="sm" /> : "Verify"}
+                    {sendOtpLoading ? 'Verify': "Verify"}
                   </Button>
               )}
                 {/* {errors.email && <FormFeedback>{errors.email.message}</FormFeedback>} */}
@@ -283,9 +279,9 @@ const isPhoneValid = phonePattern.test(watchedPhone)
                <Button 
                   color="primary" 
                   onClick={handleVerifyOtp}
-                  disabled={loading} 
+                  disabled={verifyOtpLoading} 
                 >
-                  {loading ? <Spinner size="sm" /> : "Verify OTP"}
+                  {verifyOtpLoading ? "Verifying..." : "Verify OTP"}
                 </Button>
               </div>
             )}
@@ -337,25 +333,25 @@ const isPhoneValid = phonePattern.test(watchedPhone)
                 {/* {errors.phone && <FormFeedback>{errors.phone.message}</FormFeedback>} */}
               </div>
 
-                {/* OTP field shown only after sending OTP */}
+               
                 {otpType === "phone" && otpSentSuccess && (
-                  <div className="mt-1 d-flex">
+                  <div className="input-group mt-1">
                     <Input
                       type="text"
                       placeholder="Enter OTP"
                       value={otp}
                       onChange={(e) => setOtp(e.target.value)}
                     />
-                    <Button 
+                  <Button 
                       color="primary" 
-                      className="ms-1" 
                       onClick={handleVerifyOtp}
-                      disabled={loading}
+                      disabled={verifyOtpLoading} 
                     >
-                      {loading ? <Spinner size="sm" /> : "Submit"}
+                      {verifyOtpLoading ? "Verifying..." : "Verify OTP"}
                     </Button>
                   </div>
                 )}
+                
               </div>
 
               {/* Password */}
@@ -421,7 +417,9 @@ const isPhoneValid = phonePattern.test(watchedPhone)
                 {errors.terms && <FormFeedback>{errors.terms.message}</FormFeedback>}
               </div>
 
-              <Button type="submit" block color="primary">Sign up</Button>
+              <Button type="submit" block color="primary" disabled={isLoading}>
+                {isLoading ? 'Signing up...' : 'Sign up'}
+              </Button>
             </Form>
 
 
@@ -433,7 +431,8 @@ const isPhoneValid = phonePattern.test(watchedPhone)
           </Col>
         </Col>
       </Row>
-    </div>
+      </div>
+    </UILoader>
   )
 }
 

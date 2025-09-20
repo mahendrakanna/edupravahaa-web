@@ -25,7 +25,8 @@ import { getTrialPeriod } from "../../../redux/authentication"
 
 const CourseCard = ({ course }) => {
   const [modal, setModal] = useState(false)
-  const [selectedBatch, setSelectedBatch] = useState(null) 
+  const [selectedBatch, setSelectedBatch] = useState(null)
+  const [enrolling, setEnrolling] = useState(false)
   const toggle = () => {
     setModal(!modal)
     setSelectedBatch(null) 
@@ -42,6 +43,7 @@ const CourseCard = ({ course }) => {
       return
     }
 
+    setEnrolling(true)
     try {
       const orderResponse = await axios.post(
         `${BaseUrl}/api/payments/create_order/`,
@@ -98,6 +100,8 @@ const CourseCard = ({ course }) => {
     } catch (error) {
       console.error("Enrollment error:", error)
       toast.error("Something went wrong. Try again.")
+    } finally {
+      setEnrolling(false)
     }
   }
 
@@ -259,9 +263,16 @@ const batchList = groupedBatches ? Object.values(groupedBatches) : []
           <Button 
             color="primary" 
             onClick={handleEnroll} 
-            disabled={batchList.length === 0 || !selectedBatch} 
+            disabled={batchList.length === 0 || !selectedBatch || enrolling} 
           >
-            Enroll Now
+            {enrolling ? (
+              <>
+                <span className="spinner-border spinner-border-sm me-1" />
+                Processing...
+              </>
+            ) : (
+              'Enroll Now'
+            )}
           </Button>
         </ModalFooter>
       </Modal>
