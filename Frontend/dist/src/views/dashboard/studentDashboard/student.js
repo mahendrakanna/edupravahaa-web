@@ -27,7 +27,9 @@ const StatItem = ({ icon, color, label, value, unit = "" }) => (
   </div>
 );
 
-const StudentDashboard = ({ studentId }) => {
+const StudentDashboard = () => {
+    const {user} = useSelector((state) => state.auth);
+    const studentId = user?.id; 
   const dispatch = useDispatch();
   const {
     studentName,

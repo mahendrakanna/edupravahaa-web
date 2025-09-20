@@ -1,8 +1,6 @@
-import studentDashboard from "./student";
-const App = () => {
-  return (
-    <studentDashboard/>
-  )
-}
 
-export default App
+const StudentDashboard = () => {   
+    return <div>Student Dashboard</div>;
+    }
+
+    export default StudentDashboard;
