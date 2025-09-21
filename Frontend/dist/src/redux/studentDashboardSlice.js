@@ -57,7 +57,7 @@ const dashboardSlice = createSlice({
       })
       .addCase(fetchDashboardData.fulfilled, (state, action) => {
         state.loading = false;
-        const payload = action.payload;
+        const payload = action.payload.data;
 
         if (payload) {
           state.studentName = payload.student_name || "";

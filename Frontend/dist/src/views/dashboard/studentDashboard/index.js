@@ -12,6 +12,8 @@ import {
   LineChart,
   Line,
 } from "recharts";
+import { Spinner } from "reactstrap";
+import MyCourses from "../../apps/mycourses";
 
 // ✅ Reusable Stat Item Component
 const StatItem = ({ icon, color, label, value, unit = "" }) => (
@@ -55,11 +57,27 @@ const StudentDashboard = () => {
     }
   }, [dispatch, studentId]);
 
-  if (loading) return <p>Loading...</p>;
+
   if (error) return <p className="text-danger">Error: {error}</p>;
 
   return (
     <div className="p-4 dashboard-container">
+       {loading && (
+            <div
+              className="d-flex justify-content-center align-items-center"
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                width: "100%",
+                height: "100%",
+                background: "transparent overlay", 
+                zIndex: 9999,
+              }}
+            >
+              <Spinner style={{ width: "3rem", height: "3rem" }} color="primary" />
+            </div>
+          )}
       {/* Welcome Section */}
       <div className="welcome-section mb-4">
         <h2 className="display-6 fw-bold mb-0">Welcome, {studentName} 👋🏻</h2>
@@ -85,46 +103,52 @@ const StudentDashboard = () => {
           unit={` / ${learningStats.assignments_total}`}
         />
       </div>
+      <div className="charts-row d-flex gap-4 mb-4">
+          {/* Skills Progress */}
+          <div className="rounded-2xl shadow-md bg-white p-4" style={{ flex: "0 0 50%" }}>
+            <h5 className="fw-bold mb-3">Skills Progress</h5>
+            {skills.length > 0 ? (
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart data={skills}>
+                  <XAxis dataKey="name" />
+                  <YAxis />
+                  <Tooltip />
+                  <Bar dataKey="progress" fill="#4f46e5" />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="text-muted">No skills data available.</p>
+            )}
+          </div>
 
-      {/* Skills Progress */}
-      <div className="rounded-2xl shadow-md bg-white p-4 mb-4">
-        <h5 className="fw-bold mb-3">Skills Progress</h5>
-        {skills.length > 0 ? (
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={skills}>
-              <XAxis dataKey="name" />
-              <YAxis />
-              <Tooltip />
-              <Bar dataKey="progress" fill="#4f46e5" />
-            </BarChart>
-          </ResponsiveContainer>
-        ) : (
-          <p className="text-muted">No skills data available.</p>
-        )}
-      </div>
+          {/* Weekly Trends */}
+          <div className="rounded-2xl shadow-md bg-white p-4" style={{ flex: "0 0 50%" }}>
+            <h5 className="fw-bold mb-3">Weekly Learning Trends</h5>
+            {weeklyLearningTrends.length > 0 ? (
+              <ResponsiveContainer width="100%" height={250}>
+                <LineChart data={weeklyLearningTrends}>
+                  <XAxis dataKey="day" />
+                  <YAxis />
+                  <Tooltip />
+                  <Line
+                    type="monotone"
+                    dataKey="hours"
+                    stroke="#10b981"
+                    strokeWidth={2}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="text-muted">No weekly trend data available.</p>
+            )}
+          </div>
+        </div>
 
-      {/* Weekly Trends */}
-      <div className="rounded-2xl shadow-md bg-white p-4 mb-4">
-        <h5 className="fw-bold mb-3">Weekly Learning Trends</h5>
-        {weeklyLearningTrends.length > 0 ? (
-          <ResponsiveContainer width="100%" height={250}>
-            <LineChart data={weeklyLearningTrends}>
-              <XAxis dataKey="day" />
-              <YAxis />
-              <Tooltip />
-              <Line
-                type="monotone"
-                dataKey="hours"
-                stroke="#10b981"
-                strokeWidth={2}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        ) : (
-          <p className="text-muted">No weekly trend data available.</p>
-        )}
-      </div>
 
+     <div className="mb-4">
+     <MyCourses  />
+     </div>
+      
       {/* Certificates */}
       {certificates?.length > 0 && (
         <div className="rounded-2xl shadow-md bg-white p-4">
