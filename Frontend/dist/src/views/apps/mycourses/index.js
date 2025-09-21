@@ -19,7 +19,7 @@ const MyCourses = () => {
   // console.log("My Courses:", mycourseslist)
   return (
 <Container fluid className="my-courses-container py-2 rounded shadow-sm">
-      <h2 className="mb-2 text-center">My Courses </h2>
+      <h2 className="mb-2 text-center"> MyCourses</h2>
 
       {loading && (
       <div
