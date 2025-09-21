@@ -1,4 +1,3 @@
-// src/redux/dashboardSlice.js
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import apiList from "../../api.json";
 import api from "../utility/api";
@@ -18,7 +17,7 @@ export const fetchDashboardData = createAsyncThunk(
       }
 
       const response = await api.get(
-        API_URL + apiList.student.student_dashboard + studentId,
+        `${API_URL}${apiList.student.student_dashboard}${studentId}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -26,7 +25,7 @@ export const fetchDashboardData = createAsyncThunk(
         }
       );
 
-      // return the whole API response (message, data, etc.)
+      // ✅ API already returns final data structure from doc
       return response.data;
     } catch (error) {
       return rejectWithValue(error.response?.data || error.message);
@@ -58,9 +57,7 @@ const dashboardSlice = createSlice({
       })
       .addCase(fetchDashboardData.fulfilled, (state, action) => {
         state.loading = false;
-
-        // ✅ API returns { message, message_type, data }
-        const payload = action.payload?.data;
+        const payload = action.payload;
 
         if (payload) {
           state.studentName = payload.student_name || "";
