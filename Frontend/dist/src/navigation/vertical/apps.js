@@ -25,14 +25,14 @@ export default [
     navLink: '/student-dashboard',
     roles: ['student']
   },
-  {
-    id: 'mycourses',
-    title: 'My Courses',
-    icon: <CheckSquare size={20} />,
-    navLink: '/mycourses',
-    roles: ['student','teacher']
+  // {
+  //   id: 'mycourses',
+  //   title: 'My Courses',
+  //   icon: <CheckSquare size={20} />,
+  //   navLink: '/mycourses',
+  //   roles: ['student','teacher']
     
-  },
+  // },
    {
     id:'courses',
     title: 'Courses',
