@@ -52,7 +52,7 @@ const StudentDashboard = () => {
     <div className="p-4 dashboard-container">
       {/* Welcome */}
       <div className="welcome-section mb-4">
-        <h2 className="display-6 fw-bold mb-0">Welcome, Student 👋🏻</h2>
+        <h2 className="display-6 fw-bold mb-0">Welcome, student 👋🏻</h2>
         <p className="text-muted">Keep up the great work on your learning journey!</p>
       </div>
 
