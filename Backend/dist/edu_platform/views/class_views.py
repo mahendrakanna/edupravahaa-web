@@ -1186,7 +1186,7 @@ def get_recordings(request):
             )
 
         return api_response(
-            message="Course with recording count fetched successfully.",
+            message="Recorded Course Data fetched successfully.",
             message_type="success",
             data=data,
             status_code=200
