@@ -980,19 +980,20 @@ def upload_class_recording(request, class_id):
 @permission_classes([IsAuthenticated])
 def get_recordings(request):
     """
-    Return list of courses with their recording count and batch details based on user role.
-    - If query params (course_id, batch_name, batch_start_date, batch_end_date) provided:
-        - Student: only purchased and enrolled course (matching batch) with batch details and recordings.
-        - Teacher: only assigned course with batch schedules and recordings, separate objects for each batch.
-        - Admin: all courses with batch details and recordings.
-    - If no query params, return all relevant courses.
+    Return list of courses with recording details based on user role.
+    - Without query params: Returns courses with course_id, course_name, thumbnail, and total recording count.
+        - Student: only purchased and enrolled courses.
+        - Teacher: only assigned courses.
+        - Admin: all courses.
+    - With course_id: Returns detailed response with all batches for the course, including batch_name, batch dates, and recordings.
+    - With additional query params (batch_name, batch_start_date, batch_end_date): Further filters batches for the course(s).
     """
 
     # Check if user is authenticated
     if not request.user.is_authenticated:
         return api_response(
-            message= "User is not authenticated.",
-            message_type= "error",
+            message="User is not authenticated.",
+            message_type="error",
             status_code=401
         )
 
@@ -1001,8 +1002,21 @@ def get_recordings(request):
     # Validate user role
     if not hasattr(user, 'role') or user.role not in ['admin', 'teacher', 'student']:
         return api_response(
-            message= "Invalid user role.",
-            message_type= "error",
+            message="Invalid user role.",
+            message_type="error",
+            status_code=400
+        )
+
+    # Define valid query parameters
+    valid_params = {'course_id', 'batch_name', 'batch_start_date', 'batch_end_date'}
+
+    # Check for invalid query parameters
+    invalid_params = set(request.query_params.keys()) - valid_params
+    if invalid_params:
+        invalid_param_list = ", ".join(invalid_params)
+        return api_response(
+            message=f"Invalid query parameter(s): {invalid_param_list}. Valid parameters are: {', '.join(valid_params)}.",
+            message_type="error",
             status_code=400
         )
 
@@ -1013,8 +1027,14 @@ def get_recordings(request):
     batch_end_date = request.query_params.get('batch_end_date')
 
     try:
-        # Base queryset → all courses
-        courses_qs = Course.objects.all()
+        # Base queryset → all courses with annotated recording count for simplified response
+        courses_qs = Course.objects.annotate(
+            recording_count=Count(
+                "class_schedules__sessions",
+                filter=Q(class_schedules__sessions__recording__isnull=False),
+                distinct=True,
+            )
+        )
 
         # Apply course_id filter if provided
         if course_id:
@@ -1022,14 +1042,14 @@ def get_recordings(request):
                 courses_qs = courses_qs.filter(id=course_id)
                 if not courses_qs.exists():
                     return api_response(
-                        message= f"Course with ID {course_id} not found.",
-                        message_type= "error",
+                        message=f"Course with ID {course_id} not found.",
+                        message_type="error",
                         status_code=404
                     )
             except ValueError:
                 return api_response(
-                    message= "Invalid course_id provided.",
-                    message_type= "error",
+                    message="Invalid course_id provided.",
+                    message_type="error",
                     status_code=400
                 )
                 
@@ -1053,212 +1073,132 @@ def get_recordings(request):
         # Check if any courses are found
         if not courses_qs.exists():
             return api_response(
-                message= "No courses found for the given criteria.",
-                message_type= "error",
-                status_code=400
+                message="No courses found for the given criteria.",
+                message_type="error",
+                status_code=404
             )
             
 
         # Build response data
         data = []
-        for course in courses_qs.distinct():
-            # Filter schedules based on query parameters
-            schedules = ClassSchedule.objects.filter(course=course)
 
-            if batch_name:
-                if batch_name not in ['weekdays', 'weekends']:
-                    return api_response(
-                        message= f"Invalid batch_name: {batch_name}. Must be 'weekdays' or 'weekends'.",
-                        message_type= "error",
-                        status_code=400
-                    )
-                    
-                schedules = schedules.filter(batch=batch_name)
-
-            if batch_start_date:
-                try:
-                    start_date = datetime.strptime(batch_start_date, '%Y-%m-%d').date()
-                    schedules = schedules.filter(batch_start_date__gte=start_date)
-                except ValueError:
-                    return api_response(
-                        message= "Invalid batch_start_date format. Use YYYY-MM-DD.",
-                        message_type= "error",
-                        status_code=400
-                    )
-
-            if batch_end_date:
-                try:
-                    end_date = datetime.strptime(batch_end_date, '%Y-%m-%d').date()
-                    schedules = schedules.filter(batch_end_date__lte=end_date)
-                except ValueError:
-                    return api_response(
-                        message= "Invalid batch_end_date format. Use YYYY-MM-DD.",
-                        message_type= "error",
-                        status_code=400
-                    )
-
-            # Apply role-specific schedule filtering
-            if user.is_student:
-                # Only include schedules matching enrolled batches
-                enrollments = CourseEnrollment.objects.filter(
-                    student=user,
-                    course=course,
-                    subscription__payment_status='completed'
-                )
-                enrolled_batches = enrollments.values_list('batch', flat=True)
-                schedules = schedules.filter(batch__in=enrolled_batches)
-            elif user.is_teacher:
-                # Only include schedules assigned to the teacher
-                schedules = schedules.filter(teacher=user)
-            # Admin sees all schedules, no additional filter needed
-
-            # If no schedules match after filtering, skip this course
-            if not schedules.exists() and (batch_name or batch_start_date or batch_end_date):
-                continue
-
-            for schedule in schedules:
-                # Get recordings for this batch and count them
-                recordings = ClassSession.objects.filter(
-                    schedule=schedule,
-                    recording__isnull=False
-                ).values('class_id', 'recording')
-                
-                # Calculate recording count for this specific batch
-                batch_recording_count = recordings.count()
-
-                data.append({
+        # If no query parameters, return simplified response
+        if not (course_id or batch_name or batch_start_date or batch_end_date):
+            data = [
+                {
                     "course_id": course.id,
                     "course_name": course.name,
-                    "recording_count": batch_recording_count,
-                    "batch_name": schedule.batch,
-                    "batch_start_date": schedule.batch_start_date,
-                    "batch_end_date": schedule.batch_end_date,
-                    "batch_recordings": [
-                        {
-                            "class_id": str(recording['class_id']),
-                            "recording": str(recording['recording']) if recording['recording'] else None
-                        }
-                        for recording in recordings
-                    ]
-                })
+                    "thumbnail": str(course.thumbnail) if course.thumbnail else None,
+                    "recording_count": course.recording_count,
+                }
+                for course in courses_qs.distinct()
+            ]
+        else:
+            # Handle detailed response with batch and recording information
+            for course in courses_qs.distinct():
+                # Filter schedules based on query parameters
+                schedules = ClassSchedule.objects.filter(course=course)
+
+                if batch_name:
+                    if batch_name not in ['weekdays', 'weekends']:
+                        return api_response(
+                            message=f"Invalid batch_name: {batch_name}. Must be 'weekdays' or 'weekends'.",
+                            message_type="error",
+                            status_code=400
+                        )
+                    schedules = schedules.filter(batch=batch_name)
+
+                if batch_start_date:
+                    try:
+                        start_date = datetime.strptime(batch_start_date, '%Y-%m-%d').date()
+                        schedules = schedules.filter(batch_start_date__gte=start_date)
+                    except ValueError:
+                        return api_response(
+                            message="Invalid batch_start_date format. Use YYYY-MM-DD.",
+                            message_type="error",
+                            status_code=400
+                        )
+
+                if batch_end_date:
+                    try:
+                        end_date = datetime.strptime(batch_end_date, '%Y-%m-%d').date()
+                        schedules = schedules.filter(batch_end_date__lte=end_date)
+                    except ValueError:
+                        return api_response(
+                            message="Invalid batch_end_date format. Use YYYY-MM-DD.",
+                            message_type="error",
+                            status_code=400
+                        )
+
+                # Apply role-specific schedule filtering
+                if user.is_student:
+                    # Only include schedules matching enrolled batches
+                    enrollments = CourseEnrollment.objects.filter(
+                        student=user,
+                        course=course,
+                        subscription__payment_status='completed'
+                    )
+                    enrolled_batches = enrollments.values_list('batch', flat=True)
+                    schedules = schedules.filter(batch__in=enrolled_batches)
+                elif user.is_teacher:
+                    # Only include schedules assigned to the teacher
+                    schedules = schedules.filter(teacher=user)
+                # Admin sees all schedules, no additional filter needed
+
+                # If no schedules match after filtering, skip this course
+                if not schedules.exists():
+                    continue
+
+                for schedule in schedules:
+                    # Get recordings for this batch and count them
+                    recordings = ClassSession.objects.filter(
+                        schedule=schedule,
+                        recording__isnull=False
+                    ).values('class_id', 'recording')
+
+                    # Calculate recording count for this specific batch
+                    batch_recording_count = recordings.count()
+
+                    data.append({
+                        "course_id": course.id,
+                        "course_name": course.name,
+                        "recording_count": batch_recording_count,
+                        "batch_name": schedule.batch,
+                        "batch_start_date": schedule.batch_start_date,
+                        "batch_end_date": schedule.batch_end_date,
+                        "batch_recordings": [
+                            {
+                                "class_id": str(recording['class_id']),
+                                "recording": str(recording['recording']) if recording['recording'] else None
+                            }
+                            for recording in recordings
+                        ]
+                    })
 
         # Check if any data was generated
         if not data:
             return api_response(
-                message= "No courses or batches found for the given criteria.",
-                message_type= "error",
+                message="No courses or batches found for the given criteria.",
+                message_type="error",
                 status_code=404
             )
 
         return api_response(
-            message= "Course with batch recording fetched successfully.",
-            message_type= "success",
-            data= data,
+            message="Course with recording count fetched successfully.",
+            message_type="success",
+            data=data,
             status_code=200
         )
 
     except DatabaseError:
         return api_response(
-            message= "A database error occurred while fetching courses.",
-            message_type= "error",
+            message="A database error occurred while fetching courses.",
+            message_type="error",
             status_code=500
         )
     except Exception as e:
         return api_response(
-            message= f"An unexpected error occurred: {str(e)}",
-            message_type= "error",
-            status_code=500
-        )
-
-
-@api_view(["GET"])
-@permission_classes([IsAuthenticated])
-def course_recording_count(request):
-    """
-    Return list of courses with their recording count based on user role.
-    - Student: only purchased and enrolled courses (matching batch).
-    - Teacher: only assigned courses with their batch schedules.
-    - Admin: all courses.
-    """
-
-    # Check if user is authenticated
-    if not request.user.is_authenticated:
-        return api_response(
-            message= "User is not authenticated.",
-            message_type= "error",
-            status_code=401
-        )
-
-    user = request.user
-
-    # Validate user role
-    if not hasattr(user, 'role') or user.role not in ['admin', 'teacher', 'student']:
-        return api_response(
-            message= "Invalid user role.",
-            message_type= "error",
-            status_code=400
-        )
-
-    try:
-        # Base queryset → all courses with annotated recording count
-        courses_qs = Course.objects.annotate(
-            recording_count=Count(
-                "class_schedules__sessions",
-                filter=Q(class_schedules__sessions__recording__isnull=False),
-                distinct=True,
-            )
-        )
-
-        # Apply role-based filtering
-        if user.is_student:
-            # Get courses where user has a completed subscription and matching batch enrollment
-            courses_qs = courses_qs.filter(
-                subscriptions__student=user,
-                subscriptions__payment_status='completed',
-                enrollments__student=user,
-                enrollments__batch=F('class_schedules__batch')
-            )
-        elif user.is_teacher:
-            # Get courses assigned to teacher through class schedules
-            courses_qs = courses_qs.filter(
-                class_schedules__teacher=user
-            )
-        # Admin sees all courses, no additional filter needed
-
-        # Check if any courses are found
-        if not courses_qs.exists():
-            return api_response(
-                message= "No courses found for the given criteria.",
-                message_type= "error",
-                status_code=404
-            )
-
-        # Build response data
-        data = [
-            {
-                "course_id": course.id,
-                "course_name": course.name,
-                "recording_count": course.recording_count,
-            }
-            for course in courses_qs.distinct()
-        ]
-
-        return api_response(
-            message= "Course with recording count fetched successfully.",
-            message_type= "success",
-            data= data,
-            status_code=200
-        )
-
-    except DatabaseError:
-        return api_response(
-            message= "A database error occurred while fetching courses.",
-            message_type= "error",
-            status_code=500
-        )
-    except Exception as e:
-        return Response(
-            message= f"An unexpected error occurred: {str(e)}",
-            message_type= "error",
+            message=f"An unexpected error occurred: {str(e)}",
+            message_type="error",
             status_code=500
         )
