@@ -1052,7 +1052,6 @@ def get_recordings(request):
                     message_type="error",
                     status_code=400
                 )
-                
 
         # Apply role-based filtering
         if user.is_student:
@@ -1077,7 +1076,7 @@ def get_recordings(request):
                 message_type="error",
                 status_code=404
             )
-            
+
 
         # Build response data
         data = []
@@ -1154,25 +1153,28 @@ def get_recordings(request):
                     recordings = ClassSession.objects.filter(
                         schedule=schedule,
                         recording__isnull=False
-                    ).values('class_id', 'recording')
+                    )
 
-                    # Calculate recording count for this specific batch
-                    batch_recording_count = recordings.count()
+                    batch_recordings = [
+                        {
+                            "class_id": rec.id,
+                            "recording": rec.recording.path if rec.recording else None,
+                            "session_date": rec.session_date,
+                            "start_time": rec.start_time,
+                            "end_time": rec.end_time
+                        }
+                        for rec in recordings
+                    ]
+
 
                     data.append({
                         "course_id": course.id,
                         "course_name": course.name,
-                        "recording_count": batch_recording_count,
+                        "recording_count": recordings.count(),
                         "batch_name": schedule.batch,
                         "batch_start_date": schedule.batch_start_date,
                         "batch_end_date": schedule.batch_end_date,
-                        "batch_recordings": [
-                            {
-                                "class_id": str(recording['class_id']),
-                                "recording": str(recording['recording']) if recording['recording'] else None
-                            }
-                            for recording in recordings
-                        ]
+                        "batch_recordings": batch_recordings
                     })
 
         # Check if any data was generated
