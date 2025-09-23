@@ -1,0 +1,508 @@
+// /* ---------------------------
+//    Student Dashboard Styling
+// ---------------------------- */
+
+// /* ---------------------------
+//    Theme Variables (Light + Dark)
+// ---------------------------- */
+
+
+// $white: #ffffff;
+// $body-color: #333333;
+
+// // Light theme shadows
+// $card-box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+// theme-dark-box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+
+// // Dark theme
+// $theme-dark-bg: #181818;
+// $theme-dark-body-color: #d1d1d1;
+// $theme-dark-card-bg:#232a3d;
+// $theme-dark-box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+// $theme-dark-border-color: #333333;
+// $theme-dark-headings-color: #ffffff;
+// $theme-dark-warning-color: #fbbf24;
+
+// /* ---------------------------
+//    Imports
+// ---------------------------- */
+// @import '../../base/bootstrap-extended/include';
+// @import '../../base/components/include';
+
+// /* ---------------------------
+//    Container Styling
+// ---------------------------- */
+// .dashboard-container {
+//   background-color: $white;
+//   color: $body-color;
+//   padding: 2rem;
+//   border-radius: 1rem;
+//   min-height: 100vh;
+
+//   h2, h5 {
+//     color: $body-color;
+//   }
+
+//   p {
+//     color: $body-color;
+//   }
+
+//   /* Welcome Section */
+//   .welcome-section {
+//     margin-bottom: 2rem;
+
+//     h2 {
+//       font-weight: 600;
+//     }
+
+//     p {
+//       font-size: 1rem;
+//     }
+//   }
+
+//   /* Stats Row */
+//   .stats-grid {
+//     display: flex;
+//     flex-wrap: wrap;
+//     gap: 1rem;
+//     margin-bottom: 2rem;
+
+//     .stat-item {
+//       flex: 1 1 200px;
+//       background-color: $white;
+//       color: $body-color;
+//       padding: 1rem;
+//       border-radius: 1rem;
+//       display: flex;
+//       align-items: center;
+//       gap: 1rem;
+//       box-shadow: $card-box-shadow;
+//       transition: all 0.3s ease;
+
+//       &:hover {
+//         transform: translateY(-3px);
+//         box-shadow: theme-dark-box-shadow;
+//       }
+
+//       .text-primary, .text-success, .text-warning {
+//         font-size: 1.5rem;
+//       }
+
+//       p {
+//         margin: 0;
+//         font-weight: 500;
+//       }
+
+//       h6 {
+//         margin: 0;
+//         font-weight: 600;
+//       }
+//     }
+//   }
+
+//   /* Charts Row */
+//   .charts-row {
+//     display: flex;
+//     flex-wrap: wrap;
+//     gap: 1rem;
+//     margin-bottom: 2rem;
+
+//     > div {
+//       flex: 1 1 48%;
+//       background-color: $white;
+//       padding: 1.5rem;
+//       border-radius: 1rem;
+//       box-shadow: $card-box-shadow;
+//       transition: all 0.3s ease;
+
+//       h5 {
+//         font-weight: 600;
+//         margin-bottom: 1rem;
+//       }
+
+//       &:hover {
+//         transform: translateY(-3px);
+//         box-shadow: theme-dark-box-shadow;
+//       }
+//     }
+//   }
+
+//   /* Certificates */
+//   .certificates {
+//     background-color: $white;
+//     border-radius: 1rem;
+//     padding: 1.5rem;
+//     box-shadow: $card-box-shadow;
+
+//     .certificate-item {
+//       display: flex;
+//       align-items: center;
+//       justify-content: space-between;
+//       border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+//       padding: 0.75rem 0;
+
+//       p {
+//         margin: 0;
+//       }
+
+//       .text-warning {
+//         display: flex;
+//         align-items: center;
+//         gap: 0.5rem;
+//       }
+//     }
+//   }
+
+//   /* Loading Overlay */
+//   .loading-overlay {
+//     position: absolute;
+//     top: 0;
+//     left: 0;
+//     width: 100%;
+//     height: 100%;
+//     background: rgba(255, 255, 255, 0.6);
+//     display: flex;
+//     justify-content: center;
+//     align-items: center;
+//     z-index: 9999;
+
+//     .spinner-border {
+//       width: 3rem;
+//       height: 3rem;
+//     }
+//   }
+// }
+
+// /* ---------------------------
+//    Dark Theme Overrides
+// ---------------------------- */
+// .dark-layout {
+//   .dashboard-container {
+//     background-color: $theme-dark-bg;
+//     color: $theme-dark-body-color;
+
+//     h2, h5, p {
+//       color: $theme-dark-headings-color;
+//     }
+
+//     .stats-grid .stat-item {
+//       background-color: $theme-dark-card-bg;
+//       color: $theme-dark-body-color;
+//       box-shadow: $theme-dark-box-shadow;
+
+//       &:hover {
+//         background-color: lighten($theme-dark-card-bg, 4%);
+//       }
+
+//       h6 {
+//         color: $theme-dark-headings-color;
+//       }
+//     }
+
+//     .charts-row > div {
+//       background-color: $theme-dark-card-bg;
+//       color: $theme-dark-body-color;
+//       box-shadow: $theme-dark-box-shadow;
+
+//       &:hover {
+//         background-color: lighten($theme-dark-card-bg, 4%);
+//       }
+
+//       h5 {
+//         color: $theme-dark-headings-color;
+//       }
+//     }
+
+//     .certificates {
+//       background-color: $theme-dark-card-bg;
+//       border-color: $theme-dark-border-color;
+//       box-shadow: $theme-dark-box-shadow;
+
+//       .certificate-item {
+//         border-bottom: 1px solid $theme-dark-border-color;
+
+//         p {
+//           color: $theme-dark-body-color;
+//         }
+
+//         .text-warning {
+//           color: $theme-dark-warning-color;
+//         }
+//       }
+//     }
+
+//     .loading-overlay {
+//       background: rgba(0, 0, 0, 0.4);
+//     }
+//   }
+// }
+
+// /* ---------------------------
+//    Responsive Styling
+// ---------------------------- */
+// @media (max-width: 768px) {
+//   .dashboard-container {
+//     padding: 1rem;
+
+//     .charts-row {
+//       flex-direction: column;
+
+//       > div {
+//         flex: 1 1 100%;
+//       }
+//     }
+
+//     .stats-grid {
+//       flex-direction: column;
+
+//       .stat-item {
+//         flex: 1 1 100%;
+//       }
+//     }
+//   }
+// }
+
+// @media (max-width: 576px) {
+//   .dashboard-container {
+//     .welcome-section h2 {
+//       font-size: 1.5rem;
+//     }
+
+//     .charts-row > div {
+//       padding: 1rem;
+//     }
+
+//     .stats-grid .stat-item {
+//       padding: 0.75rem;
+//     }
+//   }
+// }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+@import '../../base/bootstrap-extended/include'; 
+@import '../../base/components/include';
+
+/* ---------------------------
+   Student Dashboard Styling
+--------------------------- */
+.dashboard-container {
+  padding: 2rem;
+  border-radius: 1rem;
+  min-height: 100vh;
+  justify-content: center;
+
+  h2, h5, p {
+    color: $body-color;
+    font-weight: 600;
+  }
+
+  /* Welcome Section */
+  .welcome-section {
+    margin-bottom: 2rem;
+
+    h2 { font-weight: 600; }
+    p { font-size: 1rem; }
+  }
+
+  /* Stats Grid */
+  .stats-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 2rem;
+
+    .stat-item {
+      flex: 1 1 200px;
+      background-color: $white;
+      color: $body-color;
+      padding: 1rem;
+      border-radius: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      box-shadow: $card-box-shadow;
+      transition: all 0.3s ease;
+
+      &:hover {
+        transform: translateY(-3px);
+        box-shadow: $card-box-shadow;
+      }
+
+      h6 { margin: 0; font-weight: 600; }
+      p { margin: 0; font-weight: 500; }
+    }
+  }
+
+  /* Charts Row */
+  .charts-row {
+    display: flex;
+    flex-wrap: nowrap;
+    margin-bottom: 2rem;
+    gap: 1rem;
+
+    > div {
+      flex: 0 0 50%;
+      max-width: 50%;
+      background-color: $white;
+      padding: 1.5rem;
+      border-radius: 1rem;
+      box-shadow: $card-box-shadow;
+      transition: all 0.3s ease;
+
+      h5 { font-weight: 600; margin-bottom: 1rem; }
+
+      &:hover {
+        transform: translateY(-3px);
+        box-shadow: $card-box-shadow;
+      }
+    }
+  }
+
+  /* ---------------------------
+     Skills Progress Chart Fix
+  --------------------------- */
+ 
+  .skills-progress-card {
+     overflow: hidden;
+
+     .chart-inner { 
+        padding: 0;
+        background-color: transparent;
+        border-radius: 0;
+        width: 100%; 
+        height: 100%;
+     }
+     .recharts-wrapper { 
+        width: 100% !important;
+         height: 100% !important;
+         }
+        }
+
+  /* Certificates */
+  .certificates {
+    background-color: $white;
+    border-radius: 1rem;
+    padding: 1.5rem;
+    box-shadow: $card-box-shadow;
+
+    .certificate-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+      padding: 0.75rem 0;
+
+      p { margin: 0; }
+      .text-warning { display: flex; align-items: center; gap: 0.5rem; }
+    }
+  }
+
+  /* Loading Overlay */
+  .loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(248, 249, 250, 0.966);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+
+    .spinner-border { width: 3rem; height: 3rem; }
+  }
+
+  /* Buttons */
+  .dashboard-btn {
+    font-weight: 500;
+    padding: 0.65rem 1.2rem;
+    border-radius: 0.5rem;
+    transition: all 0.3s ease;
+
+    &:hover { transform: translateY(-2px); }
+  }
+}
+
+/* ---------------------------
+   Dark Layout Overrides
+--------------------------- */
+.dark-layout {
+  .dashboard-container {
+    background-color: $theme-dark-body-bg;
+    color: $theme-dark-body-color;
+
+    h2, h5, p { color: $theme-dark-headings-color; }
+
+    .stats-grid .stat-item,
+    .charts-row > div,
+    .certificates {
+      background-color: $theme-dark-card-bg;
+      color: $theme-dark-body-color;
+      box-shadow: $theme-dark-box-shadow;
+
+      &:hover { background-color: lighten($theme-dark-card-bg, 4%); }
+    }
+
+    .certificates .certificate-item {
+      border-bottom: 1px solid $theme-dark-border-color;
+
+      p { color: $theme-dark-body-color; }
+      .text-warning { color: $warning }
+    }
+
+    .loading-overlay { background: rgba(0, 0, 0, 0.4); }
+  }
+}
+
+/* ---------------------------
+   Responsive Styling
+--------------------------- */
+@media (max-width: 768px) {
+  .dashboard-container {
+    padding: 1rem;
+
+    .charts-row {
+      flex-direction: column;
+
+      > div {
+        flex: 0 0 100%;
+        max-width: 100%;
+      }
+    }
+
+    .stats-grid {
+      flex-direction: column;
+
+      .stat-item {
+        flex: 0 0 100%;
+      }
+    }
+  }
+}
+
+@media (max-width: 576px) {
+  .dashboard-container {
+    .welcome-section h2 { font-size: 1.5rem; }
+    .charts-row > div { padding: 1rem; }
+    .stats-grid .stat-item { padding: 0.75rem; }
+  }
+}
