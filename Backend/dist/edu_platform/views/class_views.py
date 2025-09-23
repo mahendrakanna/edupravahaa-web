@@ -32,17 +32,22 @@ def api_response(message, message_type, data=None, status_code=200):
 
 def get_serializer_error_message(errors):
     """Extracts a clean error message from serializer errors."""
+    # Check if error is already in the standard format {message, message_type}
+    if isinstance(errors, dict) and 'message' in errors and 'message_type' in errors:
+        return errors
+
+    # Handle field-specific errors or non-field errors
     if isinstance(errors, dict):
         for field, error in errors.items():
             if field == 'non_field_errors':
                 if isinstance(error, list) and error:
-                    if isinstance(error[0], dict) and 'error' in error[0]:
-                        return {'message': error[0]['error'], 'message_type': 'error'}
+                    if isinstance(error[0], dict) and 'message' in error[0]:
+                        return error[0]
                     return {'message': str(error[0]), 'message_type': 'error'}
             else:
                 if isinstance(error, list) and error:
-                    if isinstance(error[0], dict) and 'error' in error[0]:
-                        return {'message': error[0]['error'], 'message_type': 'error'}
+                    if isinstance(error[0], dict) and 'message' in error[0]:
+                        return error[0]
                     error_msg = str(error[0])
                     field_name = field.replace('_', ' ').title()
                     if error_msg == 'This field may not be blank.':
@@ -52,12 +57,12 @@ def get_serializer_error_message(errors):
                     if error_msg == 'Ensure this field has at least 8 characters.':
                         return {'message': f"{field_name} must be at least 8 characters long.", 'message_type': 'error'}
                     return {'message': error_msg, 'message_type': 'error'}
-                elif isinstance(error, dict) and 'error' in error:
-                    return {'message': error['error'], 'message_type': 'error'}
+                elif isinstance(error, dict) and 'message' in error:
+                    return error
                 return {'message': str(error), 'message_type': 'error'}
     elif isinstance(errors, list) and errors:
-        if isinstance(errors[0], dict) and 'error' in errors[0]:
-            return {'message': errors[0]['error'], 'message_type': 'error'}
+        if isinstance(errors[0], dict) and 'message' in errors[0]:
+            return errors[0]
         return {'message': str(errors[0]), 'message_type': 'error'}
     return {'message': 'Invalid input provided.', 'message_type': 'error'}
 
@@ -333,7 +338,7 @@ class ClassScheduleView(APIView):
                     status_code=status.HTTP_403_FORBIDDEN
                 )
             
-            # Restrict single batch creation to admins or the teacher themselves
+            # Restrict single batch creation to admins or teachers
             if not (request.user.is_admin or request.user.is_teacher):
                 return api_response(
                     message='You do not have permission to create schedules.',
@@ -345,7 +350,7 @@ class ClassScheduleView(APIView):
             if not serializer.is_valid():
                 error_response = get_serializer_error_message(serializer.errors)
                 return api_response(
-                    message=error_response['message'],
+                    message=get_serializer_error_message(serializer.errors)['message'],
                     message_type='error',
                     status_code=status.HTTP_400_BAD_REQUEST
                 )
@@ -366,16 +371,24 @@ class ClassScheduleView(APIView):
                     status_code=status.HTTP_201_CREATED
                 )
         except serializers.ValidationError as e:
+            # Pass ValidationError directly if it’s in the correct format
+            if isinstance(e.detail, dict) and 'message' in e.detail and 'message_type' in e.detail:
+                return api_response(
+                    message=e.detail['message'],
+                    message_type=e.detail['message_type'],
+                    status_code=status.HTTP_400_BAD_REQUEST
+                )
+            # Fallback to get_serializer_error_message for other cases
             error_response = get_serializer_error_message(e.detail)
             return api_response(
                 message=error_response['message'],
-                message_type='error',
+                message_type=error_response['message_type'],
                 status_code=status.HTTP_400_BAD_REQUEST
             )
         except Exception as e:
             logger.error(f"Error creating class schedule: {str(e)}")
             return api_response(
-                message='Failed to create schedule. Please try again.',
+                message=f'Failed to create schedule: {str(e)}',
                 message_type='error',
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
@@ -503,7 +516,7 @@ class ClassScheduleView(APIView):
                 error_response = get_serializer_error_message(serializer.errors)
                 return api_response(
                     message=error_response['message'],
-                    message_type='error',
+                    message_type=error_response['message_type'],
                     status_code=status.HTTP_400_BAD_REQUEST
                 )
             

@@ -680,43 +680,44 @@ class TeacherCourseAssignmentSerializer(serializers.Serializer):
 
         return attrs
 
-    def validate_session_conflicts(self, teacher, course_id, schedules):
-        """Checks for overlapping sessions with existing teacher schedules."""
-        for schedule in schedules:
-            start_date = schedule['start_date']
-            end_date = schedule['end_date']
-            days = schedule['days']
-            start_time_str = schedule['start_time']
-            end_time_str = schedule['end_time']
-            try:
-                start_time = datetime.strptime(start_time_str, '%I:%M %p').time()
-                end_time = datetime.strptime(end_time_str, '%I:%M %p').time()
-                if start_time >= end_time:
-                    raise ValueError("End time must be after start time.")
-            except ValueError as e:
-                raise serializers.ValidationError({
-                    'message': f"Invalid time format or logic for {schedule['type']}: {str(e)}.",
-                    'message_type': 'error'
-                })
+    # def validate_session_conflicts(self, teacher, course_id, schedules):
+        # """Checks for overlapping sessions with existing teacher schedules."""
+        # Commented out for future use as per new requirement
+        # for schedule in schedules:
+        #     start_date = schedule['start_date']
+        #     end_date = schedule['end_date']
+        #     days = schedule['days']
+        #     start_time_str = schedule['start_time']
+        #     end_time_str = schedule['end_time']
+        #     try:
+        #         start_time = datetime.strptime(start_time_str, '%I:%M %p').time()
+        #         end_time = datetime.strptime(end_time_str, '%I:%M %p').time()
+        #         if start_time >= end_time:
+        #             raise ValueError("End time must be after start time.")
+        #     except ValueError as e:
+        #         raise serializers.ValidationError({
+        #             'message': f"Invalid time format or logic for {schedule['type']}: {str(e)}.",
+        #             'message_type': 'error'
+        #         })
 
-            current_date = start_date
-            while current_date <= end_date:
-                day_name = current_date.strftime('%A')
-                if day_name in days:
-                    session_start = timezone.make_aware(datetime.combine(current_date, start_time))
-                    session_end = timezone.make_aware(datetime.combine(current_date, end_time))
-                    overlapping_sessions = ClassSession.objects.filter(
-                        schedule__teacher=teacher,
-                        start_time__lt=session_end,
-                        end_time__gt=session_start
-                    )
-                    if overlapping_sessions.exists():
-                        conflict_session = overlapping_sessions.first()
-                        raise serializers.ValidationError({
-                            'message': f"Teacher has a conflicting session on {current_date.strftime('%Y-%m-%d')} from {start_time_str} to {end_time_str} (existing: {conflict_session.start_time} to {conflict_session.end_time}). Timing must differ on the same date.",
-                            'message_type': 'error'
-                        })
-                current_date += timedelta(days=1)
+        #     current_date = start_date
+        #     while current_date <= end_date:
+        #         day_name = current_date.strftime('%A')
+        #         if day_name in days:
+        #             session_start = timezone.make_aware(datetime.combine(current_date, start_time))
+        #             session_end = timezone.make_aware(datetime.combine(current_date, end_time))
+        #             overlapping_sessions = ClassSession.objects.filter(
+        #                 schedule__teacher=teacher,
+        #                 start_time__lt=session_end,
+        #                 end_time__gt=session_start
+        #             )
+        #             if overlapping_sessions.exists():
+        #                 conflict_session = overlapping_sessions.first()
+        #                 raise serializers.ValidationError({
+        #                     'message': f"Teacher has a conflicting session on {current_date.strftime('%Y-%m-%d')} from {start_time_str} to {end_time_str} (existing: {conflict_session.start_time} to {conflict_session.end_time}). Timing must differ on the same date.",
+        #                     'message_type': 'error'
+        #                 })
+        #         current_date += timedelta(days=1)
 
 
 class TeacherCreateSerializer(serializers.ModelSerializer):
@@ -762,7 +763,7 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, attrs):
-        """Ensures passwords match."""
+        """Ensures passwords match and only one course is assigned."""
         logger.debug(f"Validating attrs: {attrs}")
         if attrs['password'] != attrs['confirm_password']:
             raise serializers.ValidationError({
@@ -770,10 +771,19 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
                 'message_type': 'error'
             })
 
-        course_ids = [assignment['course_id'] for assignment in attrs.get('course_assignments', [])]
+        # course_ids = [assignment['course_id'] for assignment in attrs.get('course_assignments', [])]
+        course_assignments = attrs.get('course_assignments', [])
+        course_ids = [assignment['course_id'] for assignment in course_assignments]
         if len(course_ids) != len(set(course_ids)):
             raise serializers.ValidationError({
                 'message': 'Duplicate course assignments are not allowed.',
+                'message_type': 'error'
+            })
+
+        # Ensure exactly one course is assigned
+        if len(course_ids) != 1:
+            raise serializers.ValidationError({
+                'message': 'A teacher can only be assigned to exactly one course during creation.',
                 'message_type': 'error'
             })
 
@@ -819,7 +829,20 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
                 batches = assignment['batches']
                 schedules = []
 
-                # Prepare schedules for validation (same as before, but loop will handle recurrence)
+                # Ensure the course is not assigned to another teacher
+                existing_schedules = ClassSchedule.objects.filter(course=course)
+                if existing_schedules.exists():
+                    existing_teacher = existing_schedules.first().teacher
+                    if existing_teacher != user:
+                        # Raise user-friendly ValidationError
+                        if 'user' in locals():
+                            user.delete()
+                        raise serializers.ValidationError({
+                            'message': f'Course {course.id} is already assigned to teacher "{existing_teacher.username}". A course can only be assigned to one teacher.',
+                            'message_type': 'error'
+                        })
+
+                # Prepare schedules for validation
                 if 'weekdays' in batches:
                     start_date = assignment['weekdays_start_date']
                     end_date = assignment['weekdays_end_date']
@@ -862,11 +885,14 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
                                 'end_time': end_time_str
                             })
 
-                # Validate session conflicts
+                # Validate assignment data
                 assignment_serializer = TeacherCourseAssignmentSerializer(data=assignment)
                 if not assignment_serializer.is_valid():
+                    if 'user' in locals():
+                        user.delete()
                     raise serializers.ValidationError(assignment_serializer.errors)
-                assignment_serializer.validate_session_conflicts(user, assignment['course_id'], schedules)
+                # validate_session_conflicts is commented out as per requirement
+                # assignment_serializer.validate_session_conflicts(user, assignment['course_id'], schedules)
 
                 # Create ClassSchedule and ClassSession for each batch
                 if 'weekdays' in batches:
@@ -946,12 +972,17 @@ class TeacherCreateSerializer(serializers.ModelSerializer):
                             current_date += timedelta(days=1)
 
             return user
+        except serializers.ValidationError as e:
+            if 'user' in locals():
+                user.delete()
+            raise
         except Exception as e:
+            # Handle unexpected errors with a generic message
             logger.error(f"Error creating teacher: {str(e)}")
             if 'user' in locals():
                 user.delete()
             raise serializers.ValidationError({
-                'message': f'Failed to create teacher: {str(e)}',
+                'message': f'An unexpected error occurred while creating the teacher: {str(e)}',
                 'message_type': 'error'
             })
 
