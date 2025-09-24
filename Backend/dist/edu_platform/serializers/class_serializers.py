@@ -491,13 +491,14 @@ class ClassScheduleSerializer(serializers.ModelSerializer):
                         'message': assignment_serializer.errors,
                         'message_type': 'error'
                     })
-                # Validate session conflicts (commented out as per TeacherCreateSerializer)
-                # assignment_serializer.validate_session_conflicts(teacher, course_id, schedules)
+                
+                # Check for session conflicts
+                assignment_serializer.validate_session_conflicts(teacher, course_id, schedules)
 
                 # Create schedules and sessions
                 created_schedules = []
                 for schedule in schedules:
-                    # Allow same batch as long as timings don’t conflict (checked if validate_session_conflicts is enabled)
+                    # Allow same batch as long as timings don’t conflict
                     existing = ClassSchedule.objects.filter(course=course, teacher=teacher, batch=schedule['batch']).first()
                     if existing:
                         logger.info(f"Teacher {teacher.email} already has a '{schedule['batch']}' batch, checking conflicts only.")
@@ -600,8 +601,9 @@ class ClassScheduleSerializer(serializers.ModelSerializer):
                         'message': assignment_serializer.errors,
                         'message_type': 'error'
                     })
-                # Validate session conflicts (commented out as per TeacherCreateSerializer)
-                # assignment_serializer.validate_session_conflicts(teacher, course_id, schedules)
+                
+                # Check for session conflicts
+                assignment_serializer.validate_session_conflicts(teacher, course_id, schedules)
 
                 # Create ClassSchedule
                 class_schedule = ClassSchedule.objects.create(
@@ -654,7 +656,7 @@ class ClassScheduleSerializer(serializers.ModelSerializer):
 
 
 
-
+# ========Code for allowng teacher assigning batches of multiple courses
 # class ClassScheduleAssignmentSerializer(serializers.Serializer):
 #     """Validates batch assignment for existing teachers."""
 #     teacher_id = serializers.IntegerField(
