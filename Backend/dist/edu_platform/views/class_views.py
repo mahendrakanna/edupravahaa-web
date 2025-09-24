@@ -627,17 +627,19 @@ class ClassSessionListView(APIView):
             elif request.user.is_teacher:
                 courses = Course.objects.filter(class_schedules__teacher=request.user).distinct()
             elif request.user.is_student:
-                courses = Course.objects.filter(
-                    enrollments__student=request.user,
-                    enrollments__subscription__payment_status='completed'
-                ).distinct()
+                enrollments = CourseEnrollment.objects.filter(
+                    student=request.user,
+                    subscription__payment_status='completed'
+                ).select_related('course')
+                course_ids = enrollments.values_list('course_id', flat=True).distinct()
+                courses = Course.objects.filter(id__in=course_ids)
             else:
                 return api_response(
                     message='You do not have permission to access class sessions.',
                     message_type='error',
                     status_code=status.HTTP_403_FORBIDDEN
                 )
-            
+
             serializer = CourseSessionSerializer(courses, many=True, context={'request': request})
             return api_response(
                 message='Class sessions retrieved successfully.',
@@ -645,6 +647,7 @@ class ClassSessionListView(APIView):
                 data=serializer.data,
                 status_code=status.HTTP_200_OK
             )
+
         except Exception as e:
             logger.error(f"Error retrieving class sessions: {str(e)}")
             return api_response(
@@ -652,6 +655,7 @@ class ClassSessionListView(APIView):
                 message_type='error',
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
 
 class ClassSessionUpdateView(APIView):
     """Handles updating details for a specific class session."""

@@ -256,15 +256,12 @@ class MyCoursesSerializer(serializers.Serializer):
                 }
             
             return {
-                'message': f"Course {instance.course.name} retrieved successfully.",
-                'message_type': 'success',
-                'data': {
                     'id': instance.id,
                     'course': course_data,
                     'purchased_at': instance.purchased_at,
                     'payment_status': instance.payment_status
                 }
-            }
+            
         elif isinstance(instance, Course):
             course_data = CourseSerializer(instance, context=self.context).data
             if not course_data.get('schedule'):
@@ -273,15 +270,12 @@ class MyCoursesSerializer(serializers.Serializer):
                     'message_type': 'Error',
                 }
             return {
-                'message': f"Course {instance.name} retrieved successfully.",
-                'message_type': 'success',
-                'data': {
                     'id': instance.id,
                     'course': course_data,
                     'purchased_at': None,
                     'payment_status': None
                 }
-            }
+
         return {
             'message': 'Invalid data provided for course retrieval.',
             'message_type': 'error'

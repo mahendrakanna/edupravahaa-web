@@ -2,6 +2,7 @@ from rest_framework import serializers
 from django.utils import timezone
 from datetime import datetime, timedelta
 from edu_platform.models import User, ClassSchedule, Course, ClassSession, CourseEnrollment
+from django.db.models import Q, F, Count
 import logging
 import uuid
 
@@ -44,9 +45,10 @@ class BatchDetailSerializer(serializers.ModelSerializer):
         model = ClassSchedule
         fields = ['batch_name', 'batch_start_date', 'batch_end_date', 'classes']
 
+
 class CourseSessionSerializer(serializers.ModelSerializer):
     """Serializer for courses with nested batches and sessions."""
-    course_name = serializers.CharField(source='name', read_only=True)
+    course_name = serializers.CharField(source='name')
     batches = serializers.SerializerMethodField()
 
     class Meta:
@@ -61,18 +63,50 @@ class CourseSessionSerializer(serializers.ModelSerializer):
         elif request.user.is_teacher:
             schedules = ClassSchedule.objects.filter(course=obj, teacher=request.user)
         elif request.user.is_student:
-            schedules = ClassSchedule.objects.filter(
+            enrollments = CourseEnrollment.objects.filter(
+                student=request.user,
                 course=obj,
-                batch__in=CourseEnrollment.objects.filter(
-                    student=request.user,
+                subscription__payment_status='completed'
+            ).select_related('subscription')
+            schedules = []
+            for enrollment in enrollments:
+                # Filter ClassSchedule by batch, start_date, end_date, and session times
+                schedule_qs = ClassSchedule.objects.filter(
                     course=obj,
-                    subscription__payment_status='completed'
-                ).values('batch')
-            )
+                    batch=enrollment.batch,
+                    batch_start_date=enrollment.start_date,
+                    batch_end_date=enrollment.end_date
+                )
+                for schedule in schedule_qs:
+                    sessions = schedule.sessions.filter(
+                        session_date__range=(enrollment.start_date, enrollment.end_date)
+                    )
+                    if enrollment.batch == 'weekdays':
+                        sessions = sessions.filter(
+                            start_time__time=enrollment.start_time,
+                            end_time__time=enrollment.end_time
+                        )
+                    elif enrollment.batch == 'weekends':
+                        sessions = sessions.filter(
+                            Q(
+                                start_time__time=enrollment.saturday_start_time,
+                                end_time__time=enrollment.saturday_end_time,
+                                session_date__week_day=7
+                            ) |
+                            Q(
+                                start_time__time=enrollment.sunday_start_time,
+                                end_time__time=enrollment.sunday_end_time,
+                                session_date__week_day=1
+                            )
+                        )
+                    # Only include schedule if it has matching sessions
+                    if sessions.exists():
+                        schedules.append(schedule)
+            schedules = ClassSchedule.objects.filter(id__in=[s.id for s in schedules])
         else:
             schedules = ClassSchedule.objects.none()
 
-        return BatchDetailSerializer(schedules.order_by('batch', 'batch_start_date'), many=True, context={'request': request}).data
+        return BatchDetailSerializer(schedules, many=True, context=self.context).data
 
 
 class ClassScheduleAssignmentSerializer(serializers.Serializer):
