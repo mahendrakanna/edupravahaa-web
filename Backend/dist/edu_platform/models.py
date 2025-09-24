@@ -295,6 +295,17 @@ class CourseSubscription(models.Model):
     order_id = models.CharField(max_length=255, unique=True, null=True, blank=True)
     amount_paid = models.DecimalField(max_digits=10, decimal_places=2)
     payment_method = models.CharField(max_length=50, choices=PAYMENT_METHOD_CHOICES, default='other')
+
+    # batch details 
+    batch = models.CharField(max_length=100, help_text="Selected batch (e.g., weekdays or weekends)")
+    start_date = models.DateField(null=True, blank=True, help_text="Start date of the batch")
+    end_date = models.DateField(null=True, blank=True, help_text="End date of the batch")
+    start_time = models.TimeField(null=True, blank=True, help_text="Start time of the batch")
+    end_time = models.TimeField(null=True, blank=True, help_text="End time of the batch")
+    saturday_start_time = models.TimeField(null=True, blank=True, help_text="Start time for Saturday (weekends only)")
+    saturday_end_time = models.TimeField(null=True, blank=True, help_text="End time for Saturday (weekends only)")
+    sunday_start_time = models.TimeField(null=True, blank=True, help_text="Start time for Sunday (weekends only)")
+    sunday_end_time = models.TimeField(null=True, blank=True,  help_text="End time for Sunday (weekends only)")
     
     # Additional payment info
     currency = models.CharField(max_length=3, default='INR')
@@ -313,38 +324,12 @@ class CourseSubscription(models.Model):
         unique_together = ['student', 'course']
         ordering = ['-purchased_at']
         indexes = [
-            models.Index(fields=['student', 'payment_status']),
-            models.Index(fields=['course', 'payment_status']),
+            models.Index(fields=['student', 'course']),
+            models.Index(fields=['order_id']),
         ]
     
     def __str__(self):
-        """Returns student email, course name, and payment status."""
-        return f"{self.student.email} - {self.course.name} ({self.payment_status})"
-    
-    def save(self, *args, **kwargs):
-        """Updates student purchase status and payment completion time."""
-        # Update student's purchase status on completed payment
-        if self.payment_status == 'completed':
-            # Update user's purchase status
-            if not self.student.has_purchased_courses:
-                self.student.has_purchased_courses = True
-                self.student.save(update_fields=['has_purchased_courses'])
-            
-            # Set payment completion timestamp
-            if not self.payment_completed_at:
-                self.payment_completed_at = timezone.now()
-        
-        super().save(*args, **kwargs)
-    
-    @property
-    def is_expired(self):
-        """Checks if subscription is expired (always False for lifetime access)."""
-        return False
-    
-    @property
-    def has_access(self):
-        """Checks if student has active access to the course."""
-        return self.payment_status == 'completed' and self.is_active
+        return f"{self.student.email} - {self.course.name} ({self.batch}) - ({self.start_date}) - ({self.end_date})"
 
 
 #--------Class models---------#
@@ -438,7 +423,15 @@ class CourseEnrollment(models.Model):
         on_delete=models.PROTECT,
         related_name='enrollments'
     )
-    batch = models.CharField(max_length=100, help_text="Selected batch (weekdays or weekends)")
+    batch = models.CharField(max_length=100, help_text="Selected batch (e.g., weekdays or weekends)")
+    start_date = models.DateField(null=True, help_text="Start date of the batch")
+    end_date = models.DateField(null=True, help_text="End date of the batch")
+    start_time = models.TimeField(null=True, help_text="Start time of the batch")
+    end_time = models.TimeField(null=True, help_text="End time of the batch")
+    saturday_start_time = models.TimeField(null=True, help_text="Start time for Saturday (weekends only)")
+    saturday_end_time = models.TimeField(null=True, help_text="End time for Saturday (weekends only)")
+    sunday_start_time = models.TimeField(null=True, help_text="Start time for Sunday (weekends only)")
+    sunday_end_time = models.TimeField(null=True, help_text="End time for Sunday (weekends only)")
     subscription = models.ForeignKey(
         CourseSubscription,
         on_delete=models.CASCADE,
