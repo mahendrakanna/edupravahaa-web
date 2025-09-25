@@ -11,7 +11,8 @@
         "updatePassword": "/api/auth/change-password/"
     },
     "student": {
-        "trialStatus": "/api/auth/trial-status/"
+        "trialStatus": "/api/auth/trial-status/",
+        "student_dashboard":"/api/dashboard/student/"
     },
     "course":{
         "courses": "/api/courses/",
@@ -26,5 +27,8 @@
     "payments": {
         "createOrder": "/api/payments/create_order/",
         "verifyPayment": "/api/payments/verify_payment/"
+    },
+    "dashboard": {
+        "teacherStats": "/api/dashboard/teacher/"
     }
 }
