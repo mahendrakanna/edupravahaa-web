@@ -144,7 +144,7 @@ function JoinMeeting() {
   const { loading, error, userName, roomId } = useJoinFormState()
   const setState = useJoinFormState.setState
   const params = useParams()
-  console.log('JoinMeeting params:', params)
+  // console.log('JoinMeeting params:', params)
  
 useEffect(() => {
   const presetRoomId = params?.roomId
@@ -237,3 +237,4 @@ export default function Landing() {
     </div>
   )
 }
+ 

@@ -223,40 +223,89 @@ export const useJoinFormState = create(() => ({ userName: '', roomId: '', loadin
 export function getLandingDefaults() { const hash = window.location.hash; if (hash.includes('join')) return { key: 'join' }; return { key: 'create' } }
  
 // ---------------------- Remote (socket/rtc) state ----------------------
+// export function createSocket() {
+//   const env = (typeof import.meta !== 'undefined' && import.meta.env) || {}
+//   const sameOriginUrl = '' // same-origin by default (proxy/dev-server)
+//   const socket = io('http://localhost:8000', {
+//     path: '/socket.io/',
+//     transports: ['websocket'],
+//    auth: (cb) => {
+//       const { sessionId } = useLocalState.getState();
+//       const { id: currentRoomId } = useRemoteState.getState().room || {};
+//       // Retrieve bearer token and user_type (e.g., from localStorage or auth context)
+//       const token = localStorage.getItem('access') || ''; // Replace with your token storage mechanism
+//       const rawUserData = localStorage.getItem('userData');
+//       const userData = rawUserData ? JSON.parse(rawUserData) : null;
+//       const userType = userData?.role || null;
+//       console.log('createSocket auth:', { sessionId, currentRoomId, token,  userType});
+ 
+//       cb({ sessionId, currentRoomId, token, userType });
+//     },
+//   });
+ 
+//   socket.onAny((event, ...args) => debug(`socket.io: '${event}'`, ...args));
+ 
+//   // Handle connection errors
+//   socket.on('connect_error', (error) => {
+//     const message = error.message || 'Connection failed';
+//     toast(message, { type: ToastType.error, autoClose: Timeout.MEDIUM });
+//     debug(`socket.io: connect_error`, error);
+//     console.error('Socket connection error:', error); // <-- added console
+//   });
+ 
+//   // Optional: catch general errors
+//   socket.on('error', (error) => {
+//     console.error('Socket error event:', error);
+//   });
+ 
+//   return socket;
+// }
 export function createSocket() {
-  const env = (typeof import.meta !== 'undefined' && import.meta.env) || {}
-  const sameOriginUrl = '' // same-origin by default (proxy/dev-server)
-  const socket = io('http://localhost:8000', {
+  // Use VITE_SOCKET_URL from env, fallback to same-origin
+  const env = (typeof import.meta !== 'undefined' && import.meta.env) || {};
+  const socketUrl = env.VITE_SOCKET_URL || ''; // fallback to same-origin if not set
+
+  const socket = io(socketUrl, {
     path: '/socket.io/',
     transports: ['websocket'],
     auth: (cb) => {
       const { sessionId } = useLocalState.getState();
       const { id: currentRoomId } = useRemoteState.getState().room || {};
-      // Retrieve bearer token and user_type (e.g., from localStorage or auth context)
-      const token = localStorage.getItem('access') || ''; // Replace with your token storage mechanism
+      const token = localStorage.getItem('access') || '';
       const rawUserData = localStorage.getItem('userData');
       const userData = rawUserData ? JSON.parse(rawUserData) : null;
-      const userRole = userData?.role || null;
-      console.log('createSocket auth:', { sessionId, currentRoomId, token,  userRole});
+      const userType = userData?.role || null;
 
-      cb({ sessionId, currentRoomId, token, userRole });
+      console.log('createSocket auth:', { sessionId, currentRoomId, token, userType });
+
+      cb({ sessionId, currentRoomId, token, userType });
     },
   });
-  socket.onAny((event, ...args) => debug(`socket.io: '${event}'`, ...args))
 
-  // Handle connection errors
+  socket.onAny((event, ...args) => debug(`socket.io: '${event}'`, ...args));
+
   socket.on('connect_error', (error) => {
-    const message = error.message || 'Connection failed';
+    let message = 'Connection failed';
+
+    // Safely parse JSON-like error message
+    try {
+      const parsed = JSON.parse(error.message.replace(/'/g, '"'));
+      if (parsed?.message) message = parsed.message;
+      else message = error.message;
+    } catch {
+      message = error.message || message;
+    }
+
     toast(message, { type: ToastType.error, autoClose: Timeout.MEDIUM });
     debug(`socket.io: connect_error`, error);
-    console.error('Socket connection error:', error); // <-- added console
+    console.error('Socket connection error:', error);
   });
- 
-  // Optional: catch general errors
+
   socket.on('error', (error) => {
     console.error('Socket error event:', error);
   });
-  return socket
+
+  return socket;
 }
  
 export const useRemoteState = create(() => ({ socket: createSocket(), room: null, connections: [] }))
@@ -452,3 +501,4 @@ export function abortRoom() {
     destroyRemoteConnection(conn)
   })
 })()
+ 
