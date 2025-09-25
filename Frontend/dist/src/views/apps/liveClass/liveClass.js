@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import {
   createRemoteConnection,
   destroyRemoteConnection,
@@ -29,24 +29,22 @@ import {
   FaComments, 
   FaExpand, 
   FaCompress, 
-  FaPhoneSlash,
-  FaHandPaper,
-  FaClosedCaptioning,
-  FaEllipsisV,
-  FaInfoCircle,
-  FaLock,
-  FaTh,
-  FaShare,
   FaTimes,
-  FaVolumeUp,
-  FaUserPlus,
-  FaSignOutAlt
+  FaSignOutAlt,
+  FaHandPaper,
+  FaRecordVinyl // Added recording icon
 } from 'react-icons/fa'
 import './LiveClass.css'
+import { useDispatch, useSelector } from "react-redux";
+import { uploadRecording } from '../../../redux/recordedVideosSlice'
 
-// Full meeting UI using only meetingSlice and external packages
 export default function LiveClass() {
   const params = useParams()
+  const navigate = useNavigate();
+  const dispatch = useDispatch();
+  const {user} = useSelector(state => state.auth)
+  const isStudent = user.role === 'student'
+
   const [socket, connections] = useRemoteState(state => [state.socket, state.connections])
   const [
     userStream,
@@ -70,6 +68,9 @@ export default function LiveClass() {
   const { messages } = useChatState()
 
   const [isFullscreen, setIsFullscreen] = useState(!!document.fullscreenElement)
+  const [handRaised, setHandRaised] = useState(false); 
+  const [raisedHands, setRaisedHands] = useState([]);
+  const [canUnmute, setCanUnmute] = useState(!isStudent)
   useEffect(() => {
     const onFsChange = () => setIsFullscreen(!!document.fullscreenElement)
     document.addEventListener('fullscreenchange', onFsChange)
@@ -101,6 +102,28 @@ export default function LiveClass() {
 
   const [captionsEnabled, setCaptionsEnabled] = useState(false)
   const [presentationAudio, setPresentationAudio] = useState(true)
+
+  // Auto-start recording when teacher joins
+  useEffect(() => {
+    if (
+      user.role === "teacher" &&
+      userStream &&
+      userStream.getTracks().length > 0 &&
+      !isRecording
+    ) {
+      startRecording();
+    }
+  }, [user.role, userStream, isRecording]);
+
+
+  useEffect(() => {
+    const urlRoomId = params?.roomId;
+    const currentRoom = useRemoteState.getState().room;
+
+    if (!currentRoom || currentRoom.id !== urlRoomId) {
+      navigate(`/live-class/landing/${urlRoomId}`, { replace: true });
+    }
+  }, [params, navigate]);
 
   useEffect(() => {
     const urlRoomId = params?.roomId
@@ -154,52 +177,159 @@ export default function LiveClass() {
   const isScreenPinned = pinnedItem && pinnedItem.id.endsWith(':screen')
 
   const toggleMic = async () => {
-    const device = audioDevices.find(d => d.deviceId === currentMicId) || audioDevices[0] || dummyAudioDevice
-    if (currentMicId) stopMediaDevice(device)
-    else await startMediaDevice(device)
-  }
+    if (user.role === 'student' && !canUnmute) {
+      toast('You cannot unmute yourself. Raise your hand to request.', { type: 'info', autoClose: Timeout.SHORT });
+      return;
+    }
+
+    const device = audioDevices.find(d => d.deviceId === currentMicId) || audioDevices[0] || dummyAudioDevice;
+    if (currentMicId) {
+      stopMediaDevice(device);
+      if (user.role === 'student') setCanUnmute(false);
+    } else {
+      await startMediaDevice(device);
+    }
+  };
+
   const toggleCam = async () => {
     const device = videoDevices.find(d => d.deviceId === currentCameraId) || videoDevices[0] || dummyVideoDevice
     if (currentCameraId) stopMediaDevice(device)
     else await startMediaDevice(device)
   }
-  const toggleScreen = async () => { if (hasScreenShare) stopScreenCapture(); else await startScreenCapture() }
+  const toggleScreen = async () => { 
+    if (hasScreenShare) stopScreenCapture(); 
+    else await startScreenCapture() 
+  }
 
   const startRecording = async () => {
     try {
-      const target = pinnedItem ? pinnedItem.stream : userStream
-      if (!target) { toast('Nothing to record', { autoClose: Timeout.SHORT }); return }
-      recordedBlobsRef.current = []
-      const mr = new MediaRecorder(target, { mimeType: 'video/webm;codecs=vp9,opus' })
-      mr.ondataavailable = e => { if (e.data && e.data.size > 0) recordedBlobsRef.current.push(e.data) }
-      mr.onstop = () => {
-        const blob = new Blob(recordedBlobsRef.current, { type: 'video/webm' })
-        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'recording.webm'; a.click(); URL.revokeObjectURL(a.href)
+      if (recorderRef.current) return; // already recording
+
+      // Wait until teacher stream is ready
+      if (!userStream || userStream.getTracks().length === 0) {
+        console.warn("User stream not ready, retrying...");
+        setTimeout(startRecording, 1000);
+        return;
       }
-      mr.start()
-      recorderRef.current = mr
-      setIsRecording(true)
-      toast('Recording started', { autoClose: Timeout.SHORT })
-    } catch { toast('Recording failed', { type: 'error' }) }
-  }
-  const stopRecording = () => {
-    const mr = recorderRef.current
-    if (mr && mr.state !== 'inactive') {
-      mr.stop()
-      recorderRef.current = null
-      setIsRecording(false)
-      toast('Recording saved', { autoClose: Timeout.SHORT })
+
+      // 🎥 1. Setup canvas
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      canvas.width = 1280;
+      canvas.height = 720;
+
+      let activeVideoTrack =
+        displayStream?.getVideoTracks()[0] || userStream?.getVideoTracks()[0];
+
+      const videoEl = document.createElement("video");
+      videoEl.srcObject = new MediaStream([activeVideoTrack]);
+      videoEl.muted = true;
+      await videoEl.play();
+
+      const drawFrame = () => {
+        if (activeVideoTrack && videoEl.readyState >= 2) {
+          ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+        }
+        requestAnimationFrame(drawFrame);
+      };
+      drawFrame();
+
+      const canvasStream = canvas.captureStream(30);
+
+      // 🎙️ 2. Mix teacher + students audio
+      const audioCtx = new AudioContext();
+      const destination = audioCtx.createMediaStreamDestination();
+
+      const addAudio = (stream) => {
+        if (!stream) return;
+        stream.getAudioTracks().forEach((track) => {
+          const src = audioCtx.createMediaStreamSource(new MediaStream([track]));
+          src.connect(destination);
+        });
+      };
+
+      addAudio(userStream); // teacher mic
+      connections.forEach((c) => addAudio(c.userStream)); // students mics
+
+      // 🎬 3. Combine video + audio
+      const mixedStream = new MediaStream([
+        ...canvasStream.getVideoTracks(),
+        ...destination.stream.getAudioTracks(),
+      ]);
+
+      // 🎥 4. Setup MediaRecorder
+      recordedBlobsRef.current = [];
+      const mr = new MediaRecorder(mixedStream, {
+        mimeType: "video/webm;codecs=vp9,opus",
+      });
+
+      mr.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) recordedBlobsRef.current.push(e.data);
+      };
+
+      mr.onstop = async () => {
+        const blob = new Blob(recordedBlobsRef.current, { type: "video/webm" });
+
+        dispatch(
+          uploadRecording({
+            roomId: params.roomId,
+            userId: user.id,
+            blob,
+          })
+        );
+      };
+
+      mr.start();
+      recorderRef.current = mr;
+      setIsRecording(true);
+      toast("Recording started", { autoClose: Timeout.SHORT });
+
+      // 🔄 5. Handle screen <-> camera switching
+      const updateActiveVideo = () => {
+        const newTrack =
+          displayStream?.getVideoTracks()[0] || userStream?.getVideoTracks()[0];
+        if (newTrack && newTrack !== activeVideoTrack) {
+          activeVideoTrack = newTrack;
+          videoEl.srcObject = new MediaStream([activeVideoTrack]);
+          videoEl.play();
+        }
+      };
+
+      // react to screen share stop
+      const screenTrack = displayStream?.getVideoTracks()[0];
+      if (screenTrack) {
+        screenTrack.onended = updateActiveVideo;
+      }
+      // poll for changes
+      setInterval(updateActiveVideo, 2000);
+    } catch (err) {
+      console.error("Recording error:", err);
+      toast("Recording failed", { type: "error" });
     }
-  }
+  };
+
+  const stopRecording = () => {
+    const mr = recorderRef.current;
+    if (mr && mr.state !== "inactive") {
+      mr.stop();
+      recorderRef.current = null;
+      setIsRecording(false);
+      toast("Recording saved", { autoClose: Timeout.SHORT });
+    }
+  };
 
   const leaveMeeting = () => {
-    stopScreenCapture()
-    audioDevices.forEach(stopMediaDevice)
-    videoDevices.forEach(stopMediaDevice)
-    connections.forEach(destroyRemoteConnection)
-    if (socket) socket.close()
-    window.history.back()
-  }
+    if (user.role === "teacher" && isRecording) {
+      stopRecording(); // stops & uploads
+    }
+    stopScreenCapture();
+    audioDevices.forEach(stopMediaDevice);
+    videoDevices.forEach(stopMediaDevice);
+    connections.forEach(destroyRemoteConnection);
+    if (socket) socket.close();
+    window.history.back();
+  };
+
 
   const [chatText, setChatText] = useState('')
   const sendChatMessage = () => {
@@ -216,71 +346,122 @@ export default function LiveClass() {
 
   const presentingLabel = allScreenItems[0]?.label || 'Presenting'
 
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleRaisedHandsUpdate = ({ raisedHands }) => {
+      setRaisedHands(raisedHands);
+      const isSelfRaised = raisedHands.some(r => r.userId === socket.id);
+      setHandRaised(isSelfRaised);
+    };
+
+    const handleUnmute = async () => {
+      setCanUnmute(true);
+      try {
+        const device = audioDevices[0] || dummyAudioDevice;
+        await startMediaDevice(device);
+        toast('You have been unmuted by the teacher', { type: 'info', autoClose: Timeout.SHORT });
+      } catch (err) {
+        console.error("Failed to start mic:", err);
+        toast('Cannot access microphone', { type: 'error' });
+      }
+    };
+
+    const handleMute = () => {
+      setCanUnmute(false);
+      if (currentMicId) {
+        const device = audioDevices.find(d => d.deviceId === currentMicId) || dummyAudioDevice;
+        stopMediaDevice(device);
+      }
+    };
+
+    socket.on('action:raised_hands_update', handleRaisedHandsUpdate);
+    socket.on('action:unmute', handleUnmute);
+    socket.on('action:mute', handleMute);
+
+    return () => {
+      socket.off('action:raised_hands_update', handleRaisedHandsUpdate);
+      socket.off('action:unmute', handleUnmute);
+      socket.off('action:mute', handleMute);
+    };
+  }, [socket, currentMicId, audioDevices, canUnmute]);
+
+  const toggleHandRaise = () => {
+    if (!isStudent) return;
+    const newRaised = !handRaised;
+    setHandRaised(newRaised);
+    socket.emit('request:raise_hand', { roomId: params.roomId, raised: newRaised });
+  };
+
+  const toggleMuteUser = (userId, isMuted) => {
+    const action = isMuted ? 'unmute_user' : 'mute_user';
+    socket.emit(`request:${action}`, { roomId: params.roomId, userId });
+  };
+
+  const micTitle = user.role !== 'student' 
+    ? (currentMicId ? 'Mute microphone' : 'Unmute microphone')
+    : canUnmute
+      ? (currentMicId ? 'Mute microphone' : 'Unmute microphone')
+      : 'You cannot unmute yourself. Raise your hand to request.';
+
   return (
     <div className="meet-container">
-      {/* {hasAnyScreenShare && (
-        <header className="presenting-header">
-          <span>{presentingLabel}</span>
-          <label className="presentation-audio">
-            <input type="checkbox" checked={presentationAudio} onChange={() => setPresentationAudio(!presentationAudio)} />
-            Presentation audio
-          </label>
-          <button onClick={toggleScreen} className="stop-presenting">Stop presenting</button>
-          <button onClick={toggleFullscreen} className="fullscreen-btn" title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}>
+      <header className="top-bar">
+        <div className="meeting-info">
+          <h1 className="meeting-title">Edu Pravaha</h1>
+          <div className="meeting-meta">
+            <span className="meeting-time">{formatTime(meetingTime)}</span>
+            <span className="meeting-id">ID: {params.roomId || 'student'}</span>
+            {isRecording && (
+              <span className="recording-indicator">
+                <FaRecordVinyl className="recording-icon" />
+                Recording
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="top-controls">
+          {hasAnyScreenShare && (
+            <>
+              <span>{presentingLabel}</span>
+              <label className="presentation-audio">
+                <input
+                  type="checkbox"
+                  checked={presentationAudio}
+                  onChange={() => setPresentationAudio(!presentationAudio)}
+                />
+                Presentation audio
+              </label>
+              <button onClick={toggleScreen} className="stop-presenting">
+                Stop presenting
+              </button>
+            </>
+          )}
+          <button
+            onClick={() => openPanel('people')}
+            className={`top-btn ${sidePanelTab === 'people' ? 'active' : ''}`}
+            title="Participants"
+          >
+            <FaUsers />
+            <span className="participant-count">{connections.length + 1}</span>
+          </button>
+          <button
+            onClick={() => openPanel('chats')}
+            className={`top-btn ${sidePanelTab === 'chats' ? 'active' : ''}`}
+            title="Chat"
+          >
+            <FaComments />
+            {messages.length > 0 && <span className="chat-indicator"></span>}
+          </button>
+          <button
+            onClick={toggleFullscreen}
+            className="top-btn"
+            title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+          >
             {isFullscreen ? <FaCompress /> : <FaExpand />}
           </button>
-        </header>
-      )} */}
-        <header className="top-bar">
-              <div className="meeting-info">
-                <h1 className="meeting-title">Edu Pravaha</h1>
-                <div className="meeting-meta">
-                  <span className="meeting-time">{formatTime(meetingTime)}</span>
-                  <span className="meeting-id">ID: {params.roomId || 'student'}</span>
-                </div>
-              </div>
-              <div className="top-controls">
-                {hasAnyScreenShare && (
-                  <>
-                  <span>{presentingLabel}</span>
-                    <label className="presentation-audio">
-                      <input
-                        type="checkbox"
-                        checked={presentationAudio}
-                        onChange={() => setPresentationAudio(!presentationAudio)}
-                      />
-                      Presentation audio
-                    </label>
-                    <button onClick={toggleScreen} className="stop-presenting">
-                      Stop presenting
-                    </button>
-                  </>
-                )}
-                <button
-                  onClick={() => openPanel('people')}
-                  className={`top-btn ${sidePanelTab === 'people' ? 'active' : ''}`}
-                  title="Participants"
-                >
-                  <FaUsers />
-                  <span className="participant-count">{connections.length + 1}</span>
-                </button>
-                <button
-                  onClick={() => openPanel('chats')}
-                  className={`top-btn ${sidePanelTab === 'chats' ? 'active' : ''}`}
-                  title="Chat"
-                >
-                  <FaComments />
-                  {messages.length > 0 && <span className="chat-indicator"></span>}
-                </button>
-                <button
-                  onClick={toggleFullscreen}
-                  className="top-btn"
-                  title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
-                >
-                  {isFullscreen ? <FaCompress /> : <FaExpand />}
-                </button>
-              </div>
-            </header>
+        </div>
+      </header>
 
       <main className="meet-main">
         <div className="video-area">
@@ -322,42 +503,42 @@ export default function LiveClass() {
               <strong>{sidePanelTab.charAt(0).toUpperCase() + sidePanelTab.slice(1)}</strong>
               <button onClick={closePanel} className="close-btn"><FaTimes /></button>
             </div>
-              {sidePanelTab === 'chats' ? (
-                <div className="chat-panel">
-                  <div className="chat-messages">
-                    {messages.length === 0 ? (
-                      <div className="no-messages">
-                        <FaComments className="no-messages-icon" />
-                        <p>No messages yet</p>
-                        <small>Start the conversation!</small>
-                      </div>
-                    ) : (
-                      messages.map((m) => (
-                        <div key={m.id} className={`chat-message ${m.mine ? 'mine' : 'other'}`}>
-                          <div className="message-avatar">{m.userLabel[0].toUpperCase()}</div>
-                          <div className="message-content">
-                            {!m.mine && <div className="message-sender">{m.userLabel}</div>}
-                            <div className="message-text">{m.text}</div>
-                          </div>
+            {sidePanelTab === 'chats' ? (
+              <div className="chat-panel">
+                <div className="chat-messages">
+                  {messages.length === 0 ? (
+                    <div className="no-messages">
+                      <FaComments className="no-messages-icon" />
+                      <p>No messages yet</p>
+                      <small>Start the conversation!</small>
+                    </div>
+                  ) : (
+                    messages.map((m) => (
+                      <div key={m.id} className={`chat-message m-1 ${m.mine ? 'mine' : 'other'}`}>
+                        <div className="message-avatar">{m.userLabel[0].toUpperCase()}</div>
+                        <div className="message-content">
+                          {!m.mine && <div className="message-sender">{m.userLabel}</div>}
+                          <div className="message-text">{m.text}</div>
                         </div>
-                      ))
-                    )}
-                  </div>
-                  <div className="chat-input-container">
-                    <input
-                      value={chatText}
-                      onChange={(e) => setChatText(e.target.value)}
-                      onKeyPress={(e) => e.key === 'Enter' && sendChatMessage()}
-                      placeholder="Type a message..."
-                      className="chat-input"
-                    />
-                    <button onClick={sendChatMessage} className="send-btn" disabled={!chatText.trim()}>
-                      Send
-                    </button>
-                  </div>
+                      </div>
+                    ))
+                  )}
                 </div>
-              ) :  (
-               <div className="participants-panel">
+                <div className="chat-input-container">
+                  <input
+                    value={chatText}
+                    onChange={(e) => setChatText(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && sendChatMessage()}
+                    placeholder="Type a message..."
+                    className="chat-input"
+                  />
+                  <button onClick={sendChatMessage} className="send-btn" disabled={!chatText.trim()}>
+                    Send
+                  </button>
+                </div>
+              </div>
+            ) :  (
+              <div className="participants-panel">
                 <div className="participant-item self">
                   <div className="participant-avatar">{(preferences.userName || 'You')[0].toUpperCase()}</div>
                   <div className="participant-info">
@@ -367,68 +548,91 @@ export default function LiveClass() {
                   <div className="participant-controls">
                     {currentMicId ? <FaMicrophone className="status-icon" /> : <FaMicrophoneSlash className="status-icon muted" />}
                     {currentCameraId ? <FaVideo className="status-icon" /> : <FaVideoSlash className="status-icon muted" />}
+                    {handRaised && <FaHandPaper className="status-icon raised" />}
                   </div>
                 </div>
-                {connections.map((c) => (
-                  <div key={c.userId} className="participant-item">
-                    <div className="participant-avatar">{(c.userName || 'Guest')[0].toUpperCase()}</div>
-                    <div className="participant-info">
-                      <div className="participant-name">{c.userName || 'Guest'}</div>
-                      <div className="participant-status">Participant</div>
+                {connections.map((c) => {
+                  const isRaised = raisedHands.some(r => r.userId === c.userId);
+                  const isMuted = remoteVideoItems.find((i) => i.id === c.userId)?.isMuted ?? true;
+                  return (
+                    <div key={c.userId} className="participant-item">
+                      <div className="participant-avatar">{(c.userName || 'Guest')[0].toUpperCase()}</div>
+                      <div className="participant-info">
+                        <div className="participant-name">{c.userName || 'Guest'}</div>
+                        <div className="participant-status">Participant</div>
+                      </div>
+                      <div className="participant-controls">
+                        {isMuted ? (
+                          <FaMicrophoneSlash className="status-icon muted" />
+                        ) : (
+                          <FaMicrophone className="status-icon" />
+                        )}
+                        {isRaised && <FaHandPaper className="status-icon raised" />}
+                        {!isStudent && (
+                          <button 
+                            onClick={() => toggleMuteUser(c.userId, isMuted)} 
+                            className="mute-btn"
+                          >
+                            {isMuted ? 'Unmute' : 'Mute'}
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    <div className="participant-controls">
-                      {(remoteVideoItems.find((i) => i.id === c.userId)?.isMuted ? (
-                        <FaMicrophoneSlash className="status-icon muted" />
-                      ) : (
-                        <FaMicrophone className="status-icon" />
-                      ))}
-                    </div>
-                  </div>
-                ))}
-                </div>
+                  );
+                })}
+              </div>
             )}
-            
           </aside>
         )}
       </main>
 
-       <footer className="bottom-controls">
-              <div className="control-buttons">
-                <button
-                  onClick={toggleMic}
-                  className={`control-btn mic ${currentMicId ? 'enabled' : 'disabled'}`}
-                  title={currentMicId ? 'Mute microphone' : 'Unmute microphone'}
-                >
-                  {currentMicId ? <FaMicrophone /> : <FaMicrophoneSlash />}
-                </button>
-                <button
-                  onClick={toggleCam}
-                  className={`control-btn camera ${currentCameraId ? 'enabled' : 'disabled'}`}
-                  title={currentCameraId ? 'Stop video' : 'Start video'}
-                >
-                  {currentCameraId ? <FaVideo /> : <FaVideoSlash />}
-                </button>
-                <button
-                  onClick={toggleScreen}
-                  className={`control-btn screen-share ${hasScreenShare ? 'active' : ''}`}
-                  title={hasScreenShare ? 'Stop sharing' : 'Share screen'}
-                >
-                  {hasScreenShare ? <FaStop /> : <FaDesktop />}
-                </button>
-                <button
-                  onClick={() => (isRecording ? stopRecording() : startRecording())}
-                  className={`control-btn record ${isRecording ? 'active' : ''}`}
-                  title={isRecording ? 'Stop recording' : 'Start recording'}
-                >
-                  {isRecording ? <FaStopCircle /> : <FaCircle />}
-                </button>
-              </div>
-              <button onClick={leaveMeeting} className="leave-meeting-btn" title="Leave meeting">
-                <FaSignOutAlt />
-                <span>Leave</span>
-              </button>
-            </footer>
-            
+      <footer className="bottom-controls">
+        <div className="control-buttons">
+          <button
+            onClick={toggleMic}
+            className={`control-btn mic ${currentMicId ? 'enabled' : 'disabled'}`}
+            title={micTitle}
+            disabled={user.role === 'student' && !canUnmute}
+          >
+            {currentMicId ? <FaMicrophone /> : <FaMicrophoneSlash />}
+          </button>
+          <button
+            onClick={toggleCam}
+            className={`control-btn camera ${currentCameraId ? 'enabled' : 'disabled'}`}
+            title={currentCameraId ? 'Stop video' : 'Start video'}
+          >
+            {currentCameraId ? <FaVideo /> : <FaVideoSlash />}
+          </button>
+          <button
+            onClick={toggleScreen}
+            className={`control-btn screen-share ${hasScreenShare ? 'active' : ''}`}
+            title={hasScreenShare ? 'Stop sharing' : 'Share screen'}
+          >
+            {hasScreenShare ? <FaStop /> : <FaDesktop />}
+          </button>
+          <button
+            onClick={() => (isRecording ? stopRecording() : startRecording())}
+            className={`control-btn record ${isRecording ? 'active' : ''}`}
+            title={isRecording ? 'Stop recording' : 'Start recording'}
+            disabled={user.role !== 'teacher'}
+          >
+            {isRecording ? <FaStopCircle /> : <FaCircle />}
+          </button>
+          {isStudent && (
+            <button
+              onClick={toggleHandRaise}
+              className={`control-btn hand-raise ${handRaised ? 'active' : ''}`}
+              title={handRaised ? 'Lower hand' : 'Raise hand'}
+            >
+              <FaHandPaper />
+            </button>
+          )}
+        </div>
+        <button onClick={leaveMeeting} className="leave-meeting-btn" title="Leave meeting">
+          <FaSignOutAlt />
+          <span>Leave</span>
+        </button>
+      </footer>
     </div>
   )
 }

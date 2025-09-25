@@ -18,8 +18,11 @@
         "mycourses": "/api/courses/my_courses/"
     },
     "classes": {
-    "sessions": "/api/classes/sessions/"
-  },
+        "sessions": "/api/classes/sessions/",
+        "recordedVideos": "/api/classes/recordings/",
+        "uploadRecording": "/api/classes/sessions/:roomId/upload-recording/"
+
+    },
     "payments": {
         "createOrder": "/api/payments/create_order/",
         "verifyPayment": "/api/payments/verify_payment/"

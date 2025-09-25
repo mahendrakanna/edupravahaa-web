@@ -33,7 +33,7 @@ export const updateFilter = createAsyncThunk(
       updatedFilters = [...selectedCalendars, filter]
     }
 
-    await dispatch(fetchEvents(updatedFilters))
+    // await dispatch(fetchEvents(updatedFilters))
     return filter
   }
 )
@@ -44,10 +44,10 @@ export const updateAllFilters = createAsyncThunk(
   async ({ all, sessions }, { dispatch }) => {
     const courseNames = sessions?.map(c => c.course_name) || []
     if (all) {
-      await dispatch(fetchEvents(courseNames))
+      // await dispatch(fetchEvents(courseNames))
       return courseNames
     } else {
-      await dispatch(fetchEvents([]))
+      // await dispatch(fetchEvents([]))
       return []
     }
   }

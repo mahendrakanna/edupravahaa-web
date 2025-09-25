@@ -42,7 +42,7 @@ const CalendarComponent = () => {
   }
 }, [sessions, dispatch])
 
-  console.log('Sessions from Redux:', sessions);
+  // console.log('Sessions from Redux:', sessions);
 
   // helper: build schedule dates
   function getScheduleDates(schedule) {

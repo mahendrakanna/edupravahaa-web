@@ -16,40 +16,15 @@ import {
 } from "reactstrap"
 import { FaCheckCircle, FaChartLine, FaClock } from "react-icons/fa"
 import '@styles/react/pages/courses.scss'
+import { useSelector } from "react-redux"
 
 const CourseCard = ({ course }) => {
   const [modal, setModal] = useState(false)
+  const {user} = useSelector(state => state.auth)
   const toggle = () => setModal(!modal)
 
-  const courseData = course.course 
-
-  // ✅ Fix property mismatch: use batchStartDate & batchEndDate
-  const groupedSchedules = courseData.schedule?.reduce((acc, sched) => {
-    if (!acc[sched.type]) {
-      acc[sched.type] = { 
-        ...sched, 
-        sessions: sched.days.map((day) => ({
-          day,
-          time: sched.time,
-          startDate: sched.batchStartDate,
-          endDate: sched.batchEndDate
-        }))
-      }
-    } else {
-      sched.days.forEach((day) => {
-        acc[sched.type].sessions.push({
-          day,
-          time: sched.time,
-          startDate: sched.batchStartDate,
-          endDate: sched.batchEndDate
-        })
-      })
-    }
-    return acc
-  }, {})
-
-  const batchList = groupedSchedules ? Object.values(groupedSchedules) : []
-
+  const courseData = course.course || {}
+ 
   return (
     <>
       <Card className="shadow-sm h-100 course-card">
@@ -97,36 +72,53 @@ const CourseCard = ({ course }) => {
           </ListGroup>
 
           <h6 className="fw-bold mt-1">Your Batch:</h6>
-          {batchList?.map((batch, idx) => (
-            <div key={idx} className="mb-1 p-1 border rounded shadow-sm">
-              {batch.sessions.map((s, i) => (
-                <p key={i} className="mb-1">
-                  <FaClock className="me-2 text-secondary" />
-                  {s.day}: {s.time}
-                </p>
-              ))}
+            {courseData.schedule && courseData.schedule.length > 0 ? (
+              courseData.schedule.map((sched, idx) => (
+                <div key={idx} className="mb-2 p-2 border rounded shadow-sm">
+                  <h6 className="fw-bold">Batch {idx + 1} ({sched.type})</h6>
 
-              <Badge color="info" className="me-2">
-                Starts from{" "}
-                {new Date(batch?.sessions[0]?.startDate).toLocaleDateString("en-US", {
-                  day: "2-digit",
-                  month: "long",
-                  year: "numeric"
-                })}
-              </Badge>
-              <Badge color="warning" className="me-2">
-                Ends on{" "}
-                {new Date(batch?.sessions[0]?.endDate).toLocaleDateString("en-US", {
-                  day: "2-digit",
-                  month: "long",
-                  year: "numeric"
-                })}
-              </Badge>
-              <p className="mt-1">
-                <strong>Type:</strong> {batch.type}
-              </p>
-            </div>
-          ))}
+                  {sched.type === "weekdays" ? (
+                    <p className="mb-1">
+                      <FaClock className="me-2 text-secondary" />
+                      {sched.days?.join(", ")} → {sched.time}
+                    </p>
+                  ) : (
+                    <>
+                      <p className="mb-1">
+                        <FaClock className="me-2 text-secondary" />
+                        Saturday → {sched.saturday_time}
+                      </p>
+                      <p className="mb-1">
+                        <FaClock className="me-2 text-secondary" />
+                        Sunday → {sched.sunday_time}
+                      </p>
+                    </>
+                  )}
+
+                  <div className="d-flex justify-content-between mt-1">
+                    <Badge color="info">
+                      📅 Starts:{" "}
+                      {new Date(sched.batchStartDate).toLocaleDateString("en-US", {
+                        day: "2-digit",
+                        month: "long",
+                        year: "numeric"
+                      })}
+                    </Badge>
+                    <Badge color="warning">
+                      🏁 Ends:{" "}
+                      {new Date(sched.batchEndDate).toLocaleDateString("en-US", {
+                        day: "2-digit",
+                        month: "long",
+                        year: "numeric"
+                      })}
+                    </Badge>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="text-muted fw-bold">Coming Soon</p>
+            )}
+
 
           <div className="mt-1 d-flex justify-content-between">
             <span>
@@ -140,7 +132,8 @@ const CourseCard = ({ course }) => {
           </div>
 
           {/* ✅ Purchased Info */}
-          <div className="mt-1">
+          {user && user.role === "student" && (
+            <div className="mt-1">
             <Badge color={course?.payment_status ? "success" : "secondary"} className="p-1">
               Payment: {course?.payment_status || "Not Paid"}
             </Badge>{" "}
@@ -151,6 +144,9 @@ const CourseCard = ({ course }) => {
                 : "N/A"}
             </Badge>
           </div>
+          )
+            }
+          
         </ModalBody>
       </Modal>
     </>

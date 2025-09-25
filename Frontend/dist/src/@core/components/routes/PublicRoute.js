@@ -9,7 +9,7 @@ import {  getHomeRouteForLoggedInUser } from '@utils'
 const PublicRoute = ({ children, route }) => {
   if (route) {
      const user = useSelector((state) => state.auth.user)
-     console.log("user",user)
+    //  console.log("user",user)
 
     const restrictedRoute = route.meta && route.meta.restricted
 

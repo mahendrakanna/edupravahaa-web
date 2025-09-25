@@ -25,11 +25,13 @@ import { getTrialPeriod } from "../../../redux/authentication"
 
 const CourseCard = ({ course }) => {
   const [modal, setModal] = useState(false)
-  const [selectedBatch, setSelectedBatch] = useState(null)
   const [enrolling, setEnrolling] = useState(false)
+  const [selectedType, setSelectedType] = useState(null)
+  const [selectedSchedule, setSelectedSchedule] = useState(null)
   const toggle = () => {
     setModal(!modal)
-    setSelectedBatch(null) 
+    setSelectedType(null)
+    setSelectedSchedule(null)
   }
   const token = useSelector((state) => state.auth.token)
   const razorpay_key = import.meta.env.VITE_RAZORPAY_KEY
@@ -38,20 +40,32 @@ const CourseCard = ({ course }) => {
   const dispatch = useDispatch()
 
   const handleEnroll = async () => {
-    if (!selectedBatch) {
-      toast.error("Please select a batch before enrolling")
+    if (!selectedSchedule) {
+      toast.error("Please select a schedule before enrolling")
       return
     }
 
     setEnrolling(true)
     try {
-      const orderResponse = await axios.post(
-        `${BaseUrl}/api/payments/create_order/`,
-        { 
-          course_id: course.id, 
-          batch: selectedBatch.type 
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
+       const payload = {
+       course_id: course.id,
+       batch: selectedSchedule.type,
+       start_date: selectedSchedule.batchStartDate,
+       end_date: selectedSchedule.batchEndDate,
+     }
+
+    if (selectedSchedule.type === "weekdays") {
+       payload.time = selectedSchedule.time
+     } else if (selectedSchedule.type === "weekends") {
+       payload.saturday_time = selectedSchedule.saturday_time
+       payload.sunday_time = selectedSchedule.sunday_time
+     }
+
+    const orderResponse = await axios.post(
+       `${BaseUrl}/api/payments/create_order/`,
+       payload,
+       { headers: { Authorization: `Bearer ${token}` } }
+     
       )
 
       const orderData = orderResponse.data.data
@@ -108,20 +122,11 @@ const CourseCard = ({ course }) => {
   // ✅ Group batches if available
 
 const groupedBatches = course.schedule?.reduce((acc, batch) => {
-  if (!acc[batch.type]) {
-    acc[batch.type] = { 
-      type: batch.type,
-      sessions: batch.days.map((day) => ({ day, time: batch.time })),
-      startDate: batch.batchStartDate,
-      endDate: batch.batchEndDate
-    }
-  } else {
-    batch.days.forEach((day) => {
-      acc[batch.type].sessions.push({ day, time: batch.time })
-    })
-  }
+  if (!acc[batch.type]) acc[batch.type] = []
+  acc[batch.type].push(batch)
   return acc
-}, {})
+}, {}) || {}
+const batchTypes = Object.keys(groupedBatches)
 
 const batchList = groupedBatches ? Object.values(groupedBatches) : []
 
@@ -132,7 +137,7 @@ const batchList = groupedBatches ? Object.values(groupedBatches) : []
         ? course.advantages.split(',').map(s => s.trim()).filter(Boolean)
         : [])
 
-
+      console.log("courses", course, batchList)
   return (
     <>
       <Card className="shadow-sm h-100 course-card">
@@ -192,26 +197,88 @@ const batchList = groupedBatches ? Object.values(groupedBatches) : []
             <p className="text-muted mb-0">Details will be updated soon.</p>
           )}
 
-          {/* ✅ Batch Selection or Coming Soon */}
-          <h6 className="fw-bold mt-1">Available Batches:</h6>
-          {batchList.length > 0 ? (
-            <div className="d-flex gap-1 flex-wrap">
-              {batchList.map((batch, idx) => (
-                <Button
-                  key={idx}
-                  outline
-                  color={selectedBatch?.type === batch.type ? "primary" : "secondary"}
-                  onClick={() => setSelectedBatch(batch)}
-                >
-                  {batch.type.charAt(0).toUpperCase() + batch.type.slice(1)}
-                </Button>
-              ))}
-            </div>
-          ) : (
-            <p className="text-muted fw-bold">Coming Soon</p>
-          )}
+         <h6 className="fw-bold mt-1">Available Batches:</h6>
 
-          {/* ✅ Show selected batch details */}
+      {batchTypes.length > 0 ? (
+        <>
+          {/* Step 1: Choose Type */}
+          <div className="d-flex gap-2 flex-wrap mb-2">
+            {batchTypes.map((type, idx) => (
+              <Button
+                key={idx}
+                outline
+                color={selectedType === type ? "primary" : "secondary"}
+                onClick={() => {
+                  setSelectedType(type)
+                  setSelectedSchedule(null) // reset schedule when switching type
+                }}
+              >
+                {type.charAt(0).toUpperCase() + type.slice(1)}
+              </Button>
+            ))}
+          </div>
+
+    {/* Step 2: Choose Schedule inside selected type */}
+        {selectedType && (
+          <div className="d-flex flex-column gap-2">
+            {groupedBatches[selectedType].map((batch, idx) => (
+              <Card
+                key={idx}
+                className={`p-2 border ${
+                  selectedSchedule === batch ? "border-primary" : ""
+                }`}
+                onClick={() => setSelectedSchedule(batch)}
+                style={{ cursor: "pointer" }}
+              >
+                <h6 className="fw-bold mb-1">
+                  Schedule {idx + 1} ({selectedType})
+                </h6>
+                {batch.type === "weekdays" ? (
+                  <p className="mb-1">
+                    <FaClock className="me-2 text-secondary" />
+                    {batch.days.join(", ")} → {batch.time}
+                  </p>
+                ) : (
+                  <>
+                    <p className="mb-1">
+                        <FaClock className="me-2 text-secondary" />
+                        Saturday → {batch.saturday_time}
+                      </p>
+                      <p className="mb-1">
+                        <FaClock className="me-2 text-secondary" />
+                        Sunday → {batch.sunday_time}
+                      </p>
+                    </>
+                  )}
+                <div className="d-flex justify-content-between">
+                  <Badge color="info">
+                    📅 Starts:{" "}
+                    {new Date(batch.batchStartDate).toLocaleDateString("en-US", {
+                      day: "2-digit",
+                      month: "long",
+                      year: "numeric",
+                    })}
+                  </Badge>
+                  <Badge color="warning">
+                    🏁 Ends:{" "}
+                    {new Date(batch.batchEndDate).toLocaleDateString("en-US", {
+                      day: "2-digit",
+                      month: "long",
+                      year: "numeric",
+                    })}
+                  </Badge>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+      </>
+    ) : (
+      <p className="text-muted fw-bold">Coming Soon</p>
+    )}
+
+
+          {/* ✅ Show selected batch details
           {selectedBatch && (
             <div className="mt-1 p-1 border rounded">
               <h6 className="fw-bold">Schedule Details:</h6>
@@ -242,7 +309,7 @@ const batchList = groupedBatches ? Object.values(groupedBatches) : []
                 </Badge>
               </div>
             </div>
-          )}
+          )} */}
 
 
           <div className="mt-1 d-flex justify-content-between">
@@ -263,7 +330,7 @@ const batchList = groupedBatches ? Object.values(groupedBatches) : []
           <Button 
             color="primary" 
             onClick={handleEnroll} 
-            disabled={batchList.length === 0 || !selectedBatch || enrolling} 
+            disabled={!selectedSchedule || enrolling} 
           >
             {enrolling ? (
               <>
@@ -274,6 +341,7 @@ const batchList = groupedBatches ? Object.values(groupedBatches) : []
               'Enroll Now'
             )}
           </Button>
+
         </ModalFooter>
       </Modal>
     </>
