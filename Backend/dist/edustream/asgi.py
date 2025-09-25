@@ -39,19 +39,19 @@ channels_app = AllowedHostsOriginValidator(
 
 async def application(scope, receive, send):
     if scope['type'] == 'http':
-        # Route /socket.io/ HTTP requests (for polling) to Socket.IO
         if scope['path'].startswith('/socket.io/'):
+            logger.info(f"Routing HTTP Socket.IO request: {scope['path']}")
             await socketio_app(scope, receive, send)
         else:
-            # Route all other HTTP requests to Django
+            logger.info(f"Routing HTTP Django request: {scope['path']}")
             await django_asgi_app(scope, receive, send)
     elif scope['type'] == 'websocket':
-        # Route /socket.io/ WebSocket requests to Socket.IO
         if scope['path'].startswith('/socket.io/'):
+            logger.info(f"Routing WebSocket Socket.IO request: {scope['path']}")
             await socketio_app(scope, receive, send)
         else:
-            # Route other WebSocket requests to Channels
+            logger.info(f"Routing WebSocket Django Channels request: {scope['path']}")
             await channels_app(scope, receive, send)
     else:
-        # Handle other protocols (e.g., lifespan) with Django
+        logger.info(f"Routing other request type: {scope['type']}")
         await django_asgi_app(scope, receive, send)
