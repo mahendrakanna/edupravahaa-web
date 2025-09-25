@@ -6,6 +6,7 @@ import MyCourses from '../../views/apps/mycourses'
 import Landing from '../../views/apps/liveClass'
 import LiveClass from '../../views/apps/liveClass/liveClass'
 import RecordedClasses from '../../views/apps/recordedvideos/recordedClasses'
+import StudentDashboard from '../../views/dashboard/studentDashboard'
 
 // Open live class landing in a new tab/window, then navigate away
 const LiveClassLauncher = () => {
@@ -34,6 +35,10 @@ const AppRoutes = [
   {
     element: <DashboardEcommerce />,
     path: '/dashboard'
+  }, 
+  {
+    element: <StudentDashboard />,
+    path: '/student-dashboard'
   },
 
   {

@@ -19,13 +19,20 @@ export default [
     roles:['teacher']
   },
   {
-    id: 'mycourses',
-    title: 'My Courses',
-    icon: <CheckSquare size={20} />,
-    navLink: '/mycourses',
-    roles: ['student','teacher']
-    
+    id:'studnet',
+    title: 'student dashboard',
+    icon: <FileText size={20} />,
+    navLink: '/student-dashboard',
+    roles: ['student']
   },
+  // {
+  //   id: 'mycourses',
+  //   title: 'My Courses',
+  //   icon: <CheckSquare size={20} />,
+  //   navLink: '/mycourses',
+  //   roles: ['student','teacher']
+    
+  // },
    {
     id:'courses',
     title: 'Courses',
