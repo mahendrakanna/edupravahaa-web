@@ -274,11 +274,11 @@ export function createSocket() {
       const token = localStorage.getItem('access') || '';
       const rawUserData = localStorage.getItem('userData');
       const userData = rawUserData ? JSON.parse(rawUserData) : null;
-      const userType = userData?.role || null;
+      const userRole = userData?.role || null;
 
-      console.log('createSocket auth:', { sessionId, currentRoomId, token, userType });
+      console.log('createSocket auth:', { sessionId, currentRoomId, token, userRole });
 
-      cb({ sessionId, currentRoomId, token, userType });
+      cb({ sessionId, currentRoomId, token, userRole });
     },
   });
 
