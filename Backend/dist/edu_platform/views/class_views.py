@@ -975,14 +975,15 @@ def upload_class_recording(request, class_id):
     Upload a class recording (video file) and attach it to ClassSession
     """
     try:
+        print(class_id)
         session = ClassSession.objects.get(id=class_id)
     except ClassSession.DoesNotExist:
-        return api_response(message= "Class session not found", message_type=error, status=status.HTTP_404_NOT_FOUND)
+        return api_response(message= "Class session not found", message_type="error", status_code=status.HTTP_404_NOT_FOUND)
 
     file_obj = request.FILES.get("recording")
 
     if not file_obj:
-        return api_response(message= "No file uploaded", message_type=error, status=status.HTTP_404_NOT_FOUND)
+        return api_response(message= "No file uploaded", message_type="error", status_code=status.HTTP_404_NOT_FOUND)
 
     session.recording = file_obj
     session.save()
@@ -1048,7 +1049,8 @@ def get_recordings(request):
         courses_qs = Course.objects.annotate(
             recording_count=Count(
                 "class_schedules__sessions",
-                filter=Q(class_schedules__sessions__recording__isnull=False),
+                filter=Q(class_schedules__sessions__recording__isnull=False) 
+                    & ~Q(class_schedules__sessions__recording=""),
                 distinct=True,
             )
         )
@@ -1104,7 +1106,7 @@ def get_recordings(request):
                 {
                     "course_id": course.id,
                     "course_name": course.name,
-                    "thumbnail": str(course.thumbnail) if course.thumbnail else None,
+                    "thumbnail": request.build_absolute_uri(course.thumbnail.url) if course.thumbnail else None,
                     "recording_count": course.recording_count,
                 }
                 for course in courses_qs.distinct()
@@ -1170,12 +1172,12 @@ def get_recordings(request):
                     recordings = ClassSession.objects.filter(
                         schedule=schedule,
                         recording__isnull=False
-                    )
+                    ).exclude(recording="")
 
                     batch_recordings = [
                         {
                             "class_id": rec.id,
-                            "recording": rec.recording.path if rec.recording else None,
+                            "recording": request.build_absolute_uri(rec.recording.url) if rec.recording else None,
                             "session_date": rec.session_date,
                             "start_time": rec.start_time,
                             "end_time": rec.end_time
