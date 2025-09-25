@@ -1,20 +1,17 @@
-// meetingSlice.js
-// Single-file state + utilities used by the frontend. Pure JS, only external deps.
-
 import { useSyncExternalStore } from 'react'
 import { io } from 'socket.io-client'
 import Peer from 'simple-peer'
 import adapter from 'webrtc-adapter'
 import { nanoid } from 'nanoid'
 import { toast as toastify, Slide } from 'react-toastify'
-
+ 
 // ---------------------- Constants ----------------------
 export const DOUBLE_CLICK_MS = 300
 export const MIN_BANDWIDTH = 150 // kbps
 export const MAX_BANDWIDTH = 2000 // kbps
 export const ASPECT_RATIO = 16 / 9
 export const VIDEO_RESOLUTION = 720
-
+ 
 // ---------------------- Toast wrapper ----------------------
 export const Timeout = { SHORT: 1500, MEDIUM: 3000, PERSIST: false }
 export const ToastType = { info: 'info', success: 'success', warning: 'warning', error: 'error', blocked: 'error', severeWarning: 'warning' }
@@ -26,7 +23,7 @@ export function toast(message, opts = {}) {
   return toastify(content, { type, autoClose, onClick, transition: Slide, position: 'bottom-left', closeOnClick: false, closeButton: false, hideProgressBar: true, draggable: true })
 }
 export const dismissToast = toastify.dismiss
-
+ 
 // ---------------------- Helpers ----------------------
 const debugEnabled = typeof import.meta !== 'undefined' ? !!import.meta.env?.DEV : false
 export function debug(...args) { if (debugEnabled) { try { console.debug('[mooz]', ...args) } catch {} } }
@@ -48,7 +45,7 @@ export function shallowEqual(a, b) {
 export function transformSdp(sdp, bandwidth /* kbps */) {
   try { return sdp.split('\n').map(line => (line.startsWith('m=video') ? `${line}\n b=AS:${bandwidth}` : line)).join('\n') } catch { return sdp }
 }
-
+ 
 // ---------------------- Stream class ----------------------
 export class Stream extends MediaStream {
   addTrack(track) { super.addTrack(track); this.dispatchEvent(new MediaStreamTrackEvent('addtrack', { track })) }
@@ -58,7 +55,7 @@ export class Stream extends MediaStream {
   get noVideo() { return this.getVideoTracks().length === 0 }
   get noAudio() { return this.getAudioTracks().length === 0 }
 }
-
+ 
 // ---------------------- Tiny store (zustand-less) ----------------------
 function create(initializer, options = {}) {
   const { persistKey, persistSelector } = options
@@ -95,7 +92,7 @@ function create(initializer, options = {}) {
   useStore.subscribe = subscribe
   return useStore
 }
-
+ 
 // ---------------------- Local state ----------------------
 function getSessionId() { const id = sessionStorage.getItem('ID') || nanoid(); sessionStorage.setItem('ID', id); return id }
 export const useLocalState = create(
@@ -191,7 +188,7 @@ if (audioEl) { const onClick = () => { audioEl.play().catch(() => {}); window.re
 export function playEnterRoomSound() { if (!audioEl) return; audioEl.src = enterRoomSound.src; audioEl.volume = enterRoomSound.volume; audioEl.play() }
 export function playLeaveRoomSound() { if (!audioEl) return; audioEl.src = leaveRoomSound.src; audioEl.volume = leaveRoomSound.volume; audioEl.play() }
 export function playChatReceivedSound() { if (!audioEl) return; audioEl.src = chatReceivedSound.src; audioEl.volume = chatReceivedSound.volume; audioEl.play() }
-
+ 
 // ---------------------- Chat state ----------------------
 export const useChatState = create(() => ({ messages: [] }))
 export function onChatReceived(chat) {
@@ -219,41 +216,51 @@ export function sendChat(chat) {
     }
   })
 }
-
+ 
 // ---------------------- Landing form state ----------------------
 export const useCreateFormState = create(() => ({ capacity: '10', userName: '', meetingName: 'Mooz Meeting', loading: false, error: null }))
 export const useJoinFormState = create(() => ({ userName: '', roomId: '', loading: false, error: null }))
 export function getLandingDefaults() { const hash = window.location.hash; if (hash.includes('join')) return { key: 'join' }; return { key: 'create' } }
-
+ 
 // ---------------------- Remote (socket/rtc) state ----------------------
 export function createSocket() {
   const env = (typeof import.meta !== 'undefined' && import.meta.env) || {}
   const sameOriginUrl = '' // same-origin by default (proxy/dev-server)
-  // const socket = io(env.VITE_SOCKET_URL || env.REACT_APP_SOCKET_URL || sameOriginUrl, {
-  //   withCredentials: false,
-  //   transports: ['websocket', 'polling'],
-  //   auth(cb) {
-  //     const { sessionId } = useLocalState.getState()
-  //     const { id: currentRoomId } = useRemoteState.getState().room || {}
-  //     cb({ sessionId, currentRoomId })
-  //   },
-  // })
-    const socket = io('http://localhost:8000', {
+  const socket = io('http://localhost:8000', {
     path: '/socket.io/',
     transports: ['websocket'],
     auth: (cb) => {
       const { sessionId } = useLocalState.getState();
       const { id: currentRoomId } = useRemoteState.getState().room || {};
-      const finalSessionId = sessionId || nanoid();
-      console.log('[mooz] createSocket auth:', { sessionId: finalSessionId, currentRoomId });
-      cb({ sessionId: finalSessionId, currentRoomId });
-    }
+      // Retrieve bearer token and user_type (e.g., from localStorage or auth context)
+      const token = localStorage.getItem('access') || ''; // Replace with your token storage mechanism
+      const rawUserData = localStorage.getItem('userData');
+      const userData = rawUserData ? JSON.parse(rawUserData) : null;
+      const userRole = userData?.role || null;
+      console.log('createSocket auth:', { sessionId, currentRoomId, token,  userRole});
+
+      cb({ sessionId, currentRoomId, token, userRole });
+    },
   });
   socket.onAny((event, ...args) => debug(`socket.io: '${event}'`, ...args))
+
+  // Handle connection errors
+  socket.on('connect_error', (error) => {
+    const message = error.message || 'Connection failed';
+    toast(message, { type: ToastType.error, autoClose: Timeout.MEDIUM });
+    debug(`socket.io: connect_error`, error);
+    console.error('Socket connection error:', error); // <-- added console
+  });
+ 
+  // Optional: catch general errors
+  socket.on('error', (error) => {
+    console.error('Socket error event:', error);
+  });
   return socket
 }
+ 
 export const useRemoteState = create(() => ({ socket: createSocket(), room: null, connections: [] }))
-
+ 
 export function setupLocalMediaListeners() {
   const { userStream, displayStream } = useLocalState.getState()
   userStream.addEventListener('addtrack', ({ track }) => {
@@ -273,7 +280,7 @@ export function setupLocalMediaListeners() {
     connections.forEach(conn => { conn.peerInstance.removeTrack(track, conn.displayStream) })
   })
 }
-
+ 
 export function createPeerInstance(opts) {
   return new Peer({
     sdpTransform: function (sdp) {
@@ -300,7 +307,7 @@ export function createPeerInstance(opts) {
     ...opts,
   })
 }
-
+ 
 export function createRemoteConnection({ initiator, userId, userName }) {
   if (!Peer.WEBRTC_SUPPORT) { alert('Your browser does not support WebRTC or it is disabled.'); return }
   const state = useRemoteState.getState()
@@ -313,17 +320,17 @@ export function createRemoteConnection({ initiator, userId, userName }) {
   const localState = useLocalState.getState()
   const { userName: nameSelf } = localState.preferences
   const { userStream, displayStream } = localState
-
+ 
   const peer = createPeerInstance({ initiator })
   const connection = { userId, userName, peerInstance: peer, userStream: new Stream(), displayStream: new Stream(), initiator }
   const reRenderConnection = () =>
     useRemoteState.setState(state => ({
       connections: state.connections.map(c => (c.userId === userId ? { ...c } : c)),
     }))
-
+ 
   userStream.getTracks().forEach(track => peer.addTrack(track, connection.userStream))
   displayStream.getTracks().forEach(track => peer.addTrack(track, connection.displayStream))
-
+ 
   peer.on('signal', sdpSignal => {
     state.socket.emit('request:send_mesage', {
       to: userId,
@@ -361,7 +368,7 @@ export function createRemoteConnection({ initiator, userId, userName }) {
       reRenderConnection()
     }
   })
-
+ 
   if (!initiator) {
     socket.emit('request:send_mesage', {
       to: userId,
@@ -371,31 +378,37 @@ export function createRemoteConnection({ initiator, userId, userName }) {
   }
   useRemoteState.setState(state => ({ connections: [...state.connections, connection] }))
 }
-
+ 
 export function destroyRemoteConnection(connection) {
   useRemoteState.setState(state => ({ connections: state.connections.filter(c => c.userId !== connection.userId) }))
   connection.userStream.destroy()
   connection.displayStream.destroy()
   connection.peerInstance.destroy()
 }
-
+ 
+ 
 export function requestLeaveRoom() {
+  const { sessionId } = useLocalState.getState()
+  const { room } = useRemoteState.getState()
+  console.log('[mooz] requestLeaveRoom → roomId:', room?.id, 'sessionId:', sessionId)
+ 
   useRemoteState.setState(state => {
     const { socket, room } = state
     if (!room) return {}
-    socket.emit('request:leave_room', { roomId: room.id }, error => { if (error) toast(error.message, { type: ToastType.error }) })
+    socket.emit('request:leave_room', { roomId: room.id,sessionId }, error => { if (error) toast(error.message, { type: ToastType.error }) })
     return {}
   })
 }
-
+ 
 export function enterRoom(room) {
+  console.log('[mooz] enterRoom → roomId:', room.id, 'sessionId:', useLocalState.getState().sessionId)
   useRemoteState.setState({ room })
   playEnterRoomSound()
   window.history.pushState({}, 'Mooz', `/room/${room.id}`)
   toast(`Joined ${room.name}`)
   useJoinFormState.setState({ roomId: room.id })
 }
-
+ 
 export function abortRoom() {
   useRemoteState.setState(state => {
     state.connections.forEach(connection => destroyRemoteConnection(connection))
@@ -405,19 +418,19 @@ export function abortRoom() {
   playLeaveRoomSound()
   useLocalState.setState({ showEmptyMediaPanel: true })
 }
-
+ 
 // ---------------------- Attach socket listeners globally (CRITICAL) ----------------------
 ;(function attachSocketHandlersOnce() {
   const socket = useRemoteState.getState().socket
   if (!socket || socket.__moozHandlersAttached) return
   socket.__moozHandlersAttached = true
-
+ 
   try { setupLocalMediaListeners() } catch {}
-
+ 
   socket.on('action:establish_peer_connection', ({ userId, userName }) => {
     try { createRemoteConnection({ userId, userName, initiator: false }) } catch {}
   })
-
+ 
   socket.on('action:message_received', ({ from, data }) => {
     const connections = useRemoteState.getState().connections
     if (data && data.connection) {
@@ -430,7 +443,7 @@ export function abortRoom() {
       try { conn.metaData = data.metaData; conn.peerInstance.signal(data.sdpSignal) } catch (err) { console.error('sdp signal error:', err) }
     }
   })
-
+ 
   socket.on('action:terminate_peer_connection', ({ userId }) => {
     const connections = useRemoteState.getState().connections
     const conn = connections.find(c => c.userId === userId)
