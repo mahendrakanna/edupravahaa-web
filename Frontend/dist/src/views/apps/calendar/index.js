@@ -37,10 +37,10 @@ const CalendarComponent = () => {
 
   // default select all when courses load
   useEffect(() => {
-    if (sessions?.length > 0) {
-      dispatch(updateAllFilters({ all: true, sessions }))
-    }
-  }, [sessions, dispatch])
+  if (sessions?.length > 0) {
+    dispatch(updateAllFilters({ all: true, sessions }))
+  }
+}, [sessions, dispatch])
 
   // console.log('Sessions from Redux:', sessions);
 
@@ -106,7 +106,9 @@ const filteredEvents = sessionEvents.filter(
   event => store.selectedCalendars.includes(event.extendedProps.courseName)
 )
 
-const eventsToShow = store.selectedCalendars.length > 0 ? filteredEvents : sessionEvents
+const eventsToShow = filteredEvents
+
+
 
 // console.log('Events to Show:', eventsToShow,filteredEvents);
 

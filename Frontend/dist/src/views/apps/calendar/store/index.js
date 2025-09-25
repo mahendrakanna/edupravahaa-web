@@ -21,23 +21,38 @@ export const updateEvent = createAsyncThunk('appCalendar/updateEvent', async (ev
   return event
 })
 
-export const updateFilter = createAsyncThunk('appCalendar/updateFilter', async (filter, { dispatch, getState }) => {
-  if (getState().calendar.selectedCalendars.includes(filter)) {
-    await dispatch(fetchEvents(getState().calendar.selectedCalendars.filter(i => i !== filter)))
-  } else {
-    await dispatch(fetchEvents([...getState().calendar.selectedCalendars, filter]))
-  }
-  return filter
-})
+export const updateFilter = createAsyncThunk(
+  'appCalendar/updateFilter',
+  async (filter, { dispatch, getState }) => {
+    const { selectedCalendars } = getState().calendar
+    let updatedFilters = []
 
-export const  updateAllFilters = createAsyncThunk('appCalendar/updateAllFilters', async (value, { dispatch }) => {
-  if (value === true) {
-    await dispatch(fetchEvents(['Personal', 'Business', 'Family', 'Holiday', 'ETC']))
-  } else {
-    await dispatch(fetchEvents([]))
+    if (selectedCalendars.includes(filter)) {
+      updatedFilters = selectedCalendars.filter(i => i !== filter)
+    } else {
+      updatedFilters = [...selectedCalendars, filter]
+    }
+
+    // await dispatch(fetchEvents(updatedFilters))
+    return filter
   }
-  return value
-})
+)
+
+
+export const updateAllFilters = createAsyncThunk(
+  'appCalendar/updateAllFilters',
+  async ({ all, sessions }, { dispatch }) => {
+    const courseNames = sessions?.map(c => c.course_name) || []
+    if (all) {
+      // await dispatch(fetchEvents(courseNames))
+      return courseNames
+    } else {
+      // await dispatch(fetchEvents([]))
+      return []
+    }
+  }
+)
+
 
 export const removeEvent = createAsyncThunk('appCalendar/removeEvent', async id => {
   await axios.delete('/apps/calendar/remove-event', { id })
@@ -69,15 +84,8 @@ export const appCalendarSlice = createSlice({
         }
       })
       .addCase(updateAllFilters.fulfilled, (state, action) => {
-        const value = action.payload
-        let selected = []
-        if (value === true) {
-          selected = ['Personal', 'Business', 'Family', 'Holiday', 'ETC']
-        } else {
-          selected = []
-        }
-        state.selectedCalendars = selected
-      })
+  state.selectedCalendars = action.payload
+})
   }
 })
 

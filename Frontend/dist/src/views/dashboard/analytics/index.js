@@ -18,8 +18,7 @@ import { ThemeColors } from '@src/utility/context/ThemeColors'
 // ** Reactstrap Imports
 import { Row, Col, Card, CardHeader, CardTitle, CardBody } from 'reactstrap'
 
-// ** Demo Components
-import InvoiceList from '@src/views/apps/invoice/list'
+// ** Demo Componentsist'
 import Sales from '@src/views/ui-elements/cards/analytics/Sales'
 import AvgSessions from '@src/views/ui-elements/cards/analytics/AvgSessions'
 import CardAppDesign from '@src/views/ui-elements/cards/advance/CardAppDesign'
@@ -171,11 +170,7 @@ const AnalyticsDashboard = () => {
           <CardAppDesign />
         </Col>
       </Row>
-      <Row className='match-height'>
-        <Col xs='12'>
-          <InvoiceList />
-        </Col>
-      </Row>
+      
     </div>
   )
 }

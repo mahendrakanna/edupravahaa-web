@@ -24,7 +24,7 @@ const Courses = () => {
           left: 0,
           width: "100%",
           height: "100%",
-          background: "transparent overlay", // transparent white overlay
+          background: "transparent overlay", 
           zIndex: 9999,
         }}
       >

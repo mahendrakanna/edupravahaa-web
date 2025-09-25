@@ -69,8 +69,8 @@ class CreateOrderView(BaseAPIView):
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'message': openapi.Schema(type=openapi.TYPE_STRING, description="Response message"),
-                        'message_type': openapi.Schema(type=openapi.TYPE_STRING, enum=['success', 'error'], description="Type of message"),
+                        'message': openapi.Schema(type=openapi.TYPE_STRING),
+                        'message_type': openapi.Schema(type=openapi.TYPE_STRING, enum=['success', 'error']),
                         'data': openapi.Schema(
                             type=openapi.TYPE_OBJECT,
                             properties={
@@ -79,53 +79,24 @@ class CreateOrderView(BaseAPIView):
                                 'currency': openapi.Schema(type=openapi.TYPE_STRING, description="Currency code (e.g., INR)"),
                                 'key': openapi.Schema(type=openapi.TYPE_STRING, description="Razorpay key ID"),
                                 'subscription_id': openapi.Schema(type=openapi.TYPE_INTEGER, description="Subscription ID"),
-                                'batch': openapi.Schema(type=openapi.TYPE_STRING, description="Selected batch")
-                            },
-                            description="Order details"
+                                'batch': openapi.Schema(type=openapi.TYPE_STRING, description="Selected batch"),
+                                'start_date': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_DATE),
+                                'end_date': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_DATE),
+                                'start_time': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_DATETIME),
+                                'end_time': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_DATETIME),
+                                'saturday_start_time': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_DATETIME, nullable=True),
+                                'saturday_end_time': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_DATETIME, nullable=True),
+                                'sunday_start_time': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_DATETIME, nullable=True),
+                                'sunday_end_time': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_DATETIME, nullable=True)
+                            }
                         )
                     }
                 )
             ),
-            400: openapi.Response(
-                description="Invalid input",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        'message': openapi.Schema(type=openapi.TYPE_STRING, description="Error message, e.g., 'Razorpay Payment Id is required.'"),
-                        'message_type': openapi.Schema(type=openapi.TYPE_STRING, enum=['success', 'error'], description="Type of message")
-                    }
-                )
-            ),
-            401: openapi.Response(
-                description="Unauthorized",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        'message': openapi.Schema(type=openapi.TYPE_STRING, description="Error message"),
-                        'message_type': openapi.Schema(type=openapi.TYPE_STRING, enum=['success', 'error'], description="Type of message")
-                    }
-                )
-            ),
-            403: openapi.Response(
-                description="Forbidden",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        'message': openapi.Schema(type=openapi.TYPE_STRING, description="Error message"),
-                        'message_type': openapi.Schema(type=openapi.TYPE_STRING, enum=['success', 'error'], description="Type of message")
-                    }
-                )
-            ),
-            500: openapi.Response(
-                description="Server error",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        'message': openapi.Schema(type=openapi.TYPE_STRING, description="Error message"),
-                        'message_type': openapi.Schema(type=openapi.TYPE_STRING, enum=['success', 'error'], description="Type of message")
-                    }
-                )
-            )
+            400: openapi.Response(description="Invalid input"),
+            401: openapi.Response(description="Unauthorized"),
+            403: openapi.Response(description="Forbidden"),
+            500: openapi.Response(description="Server error")
         }
     )
     def post(self, request):
@@ -137,6 +108,14 @@ class CreateOrderView(BaseAPIView):
             
             course_id = serializer.validated_data['course_id']
             batch = serializer.validated_data['batch']
+            start_date = serializer.validated_data['start_date']
+            end_date = serializer.validated_data['end_date']
+            start_time = serializer.validated_data.get('start_time')
+            end_time = serializer.validated_data.get('end_time')
+            saturday_start_time = serializer.validated_data.get('saturday_start_time')
+            saturday_end_time = serializer.validated_data.get('saturday_end_time')
+            sunday_start_time = serializer.validated_data.get('sunday_start_time')
+            sunday_end_time = serializer.validated_data.get('sunday_end_time')
             course = Course.objects.get(id=course_id, is_active=True)
 
             # Check for existing pending subscription
@@ -160,7 +139,15 @@ class CreateOrderView(BaseAPIView):
                     'course_id': str(course.id),
                     'student_id': str(request.user.id),
                     'student_email': request.user.email,
-                    'batch': batch
+                    'batch': batch,
+                    'start_date': str(start_date),
+                    'end_date': str(end_date),
+                    'start_time': str(start_time) if start_time else '',
+                    'end_time': str(end_time) if end_time else '',
+                    'saturday_start_time': str(saturday_start_time) if saturday_start_time else '',
+                    'saturday_end_time': str(saturday_end_time) if saturday_end_time else '',
+                    'sunday_start_time': str(sunday_start_time) if sunday_start_time else '',
+                    'sunday_end_time': str(sunday_end_time) if sunday_end_time else ''
                 }
             }
             order = client.order.create(data=order_data)
@@ -168,13 +155,34 @@ class CreateOrderView(BaseAPIView):
             # Update or create subscription
             if subscription:
                 subscription.order_id = order['id']
+                subscription.batch = batch
+                subscription.start_date = start_date
+                subscription.end_date = end_date
+                subscription.start_time = start_time
+                subscription.end_time = end_time
+                subscription.saturday_start_time = saturday_start_time
+                subscription.saturday_end_time = saturday_end_time
+                subscription.sunday_start_time = sunday_start_time
+                subscription.sunday_end_time = sunday_end_time
                 subscription.purchased_at = timezone.now()
-                subscription.save(update_fields=['order_id', 'purchased_at'])
+                subscription.save(update_fields=[
+                    'order_id', 'batch', 'start_date', 'end_date', 'start_time', 'end_time',
+                    'saturday_start_time', 'saturday_end_time', 'sunday_start_time', 'sunday_end_time', 'purchased_at'
+                ])
                 logger.info(f"Updated subscription {subscription.id} with new order_id {order['id']}")
             else:
                 subscription = CourseSubscription.objects.create(
                     student=request.user,
                     course=course,
+                    batch=batch,
+                    start_date=start_date,
+                    end_date=end_date,
+                    start_time=start_time,
+                    end_time=end_time,
+                    saturday_start_time=saturday_start_time,
+                    saturday_end_time=saturday_end_time,
+                    sunday_start_time=sunday_start_time,
+                    sunday_end_time=sunday_end_time,
                     amount_paid=course.base_price,
                     order_id=order['id'],
                     payment_method='razorpay',
@@ -183,6 +191,7 @@ class CreateOrderView(BaseAPIView):
                 )
                 logger.info(f"Created new subscription {subscription.id} for user {request.user.id}, course {course.id}")
 
+            # Update or create enrollment
             try:
                 enrollment = CourseEnrollment.objects.get(
                     student=request.user,
@@ -190,13 +199,32 @@ class CreateOrderView(BaseAPIView):
                     subscription=subscription
                 )
                 enrollment.batch = batch
-                enrollment.save(update_fields=['batch'])
+                enrollment.start_date = start_date
+                enrollment.end_date = end_date
+                enrollment.start_time = start_time
+                enrollment.end_time = end_time
+                enrollment.saturday_start_time = saturday_start_time
+                enrollment.saturday_end_time = saturday_end_time
+                enrollment.sunday_start_time = sunday_start_time
+                enrollment.sunday_end_time = sunday_end_time
+                enrollment.save(update_fields=[
+                    'batch', 'start_date', 'end_date', 'start_time', 'end_time',
+                    'saturday_start_time', 'saturday_end_time', 'sunday_start_time', 'sunday_end_time'
+                ])
                 logger.info(f"Updated enrollment for subscription {subscription.id} with batch {batch}")
             except CourseEnrollment.DoesNotExist:
                 enrollment = CourseEnrollment.objects.create(
                     student=request.user,
                     course=course,
                     batch=batch,
+                    start_date=start_date,
+                    end_date=end_date,
+                    start_time=start_time,
+                    end_time=end_time,
+                    saturday_start_time=saturday_start_time,
+                    saturday_end_time=saturday_end_time,
+                    sunday_start_time=sunday_start_time,
+                    sunday_end_time=sunday_end_time,
                     subscription=subscription
                 )
                 logger.info(f"Created new enrollment for subscription {subscription.id} with batch {batch}")
@@ -210,7 +238,15 @@ class CreateOrderView(BaseAPIView):
                     'currency': order['currency'],
                     'key': settings.RAZORPAY_KEY_ID,
                     'subscription_id': subscription.id,
-                    'batch': batch
+                    'batch': batch,
+                    'start_date': str(start_date),
+                    'end_date': str(end_date),
+                    'start_time': str(start_time) if start_time else None,
+                    'end_time': str(end_time) if end_time else None,
+                    'saturday_start_time': str(saturday_start_time) if saturday_start_time else None,
+                    'saturday_end_time': str(saturday_end_time) if saturday_end_time else None,
+                    'sunday_start_time': str(sunday_start_time) if sunday_start_time else None,
+                    'sunday_end_time': str(sunday_end_time) if sunday_end_time else None
                 },
                 status_code=status.HTTP_200_OK
             )
@@ -242,6 +278,7 @@ class CreateOrderView(BaseAPIView):
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+
 class VerifyPaymentView(BaseAPIView):
     """Verifies Razorpay payment and updates subscription and enrollment."""
     permission_classes = [IsAuthenticated, IsStudent]
@@ -254,60 +291,31 @@ class VerifyPaymentView(BaseAPIView):
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'message': openapi.Schema(type=openapi.TYPE_STRING, description="Response message"),
-                        'message_type': openapi.Schema(type=openapi.TYPE_STRING, enum=['success', 'error'], description="Type of message"),
+                        'message': openapi.Schema(type=openapi.TYPE_STRING),
+                        'message_type': openapi.Schema(type=openapi.TYPE_STRING, enum=['success', 'error']),
                         'data': openapi.Schema(
                             type=openapi.TYPE_OBJECT,
                             properties={
                                 'subscription_id': openapi.Schema(type=openapi.TYPE_INTEGER, description="Subscription ID"),
                                 'course_name': openapi.Schema(type=openapi.TYPE_STRING, description="Course name"),
-                                'batch': openapi.Schema(type=openapi.TYPE_STRING, description="Selected batch")
-                            },
-                            description="Payment verification details"
+                                'batch': openapi.Schema(type=openapi.TYPE_STRING, description="Selected batch"),
+                                'start_date': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_DATE),
+                                'end_date': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_DATE),
+                                'start_time': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_DATETIME, nullable=True),
+                                'end_time': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_DATETIME, nullable=True),
+                                'saturday_start_time': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_DATETIME, nullable=True),
+                                'saturday_end_time': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_DATETIME, nullable=True),
+                                'sunday_start_time': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_DATETIME, nullable=True),
+                                'sunday_end_time': openapi.Schema(type=openapi.TYPE_STRING, format=openapi.FORMAT_DATETIME, nullable=True)
+                            }
                         )
                     }
                 )
             ),
-            400: openapi.Response(
-                description="Invalid input",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        'message': openapi.Schema(type=openapi.TYPE_STRING, description="Error message, e.g., 'Razorpay Payment Id is required.'"),
-                        'message_type': openapi.Schema(type=openapi.TYPE_STRING, enum=['success', 'error'], description="Type of message")
-                    }
-                )
-            ),
-            401: openapi.Response(
-                description="Unauthorized",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        'message': openapi.Schema(type=openapi.TYPE_STRING, description="Error message"),
-                        'message_type': openapi.Schema(type=openapi.TYPE_STRING, enum=['success', 'error'], description="Type of message")
-                    }
-                )
-            ),
-            403: openapi.Response(
-                description="Forbidden",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        'message': openapi.Schema(type=openapi.TYPE_STRING, description="Error message"),
-                        'message_type': openapi.Schema(type=openapi.TYPE_STRING, enum=['success', 'error'], description="Type of message")
-                    }
-                )
-            ),
-            500: openapi.Response(
-                description="Server error",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        'message': openapi.Schema(type=openapi.TYPE_STRING, description="Error message"),
-                        'message_type': openapi.Schema(type=openapi.TYPE_STRING, enum=['success', 'error'], description="Type of message")
-                    }
-                )
-            )
+            400: openapi.Response(description="Invalid input"),
+            401: openapi.Response(description="Unauthorized"),
+            403: openapi.Response(description="Forbidden"),
+            500: openapi.Response(description="Server error")
         }
     )
     def post(self, request):
@@ -315,7 +323,7 @@ class VerifyPaymentView(BaseAPIView):
         try:
             serializer = self.validate_serializer(VerifyPaymentSerializer, request.data)
             if isinstance(serializer, Response):
-                return serializer  # Return error response from validate_serializer
+                return serializer
             
             payment_id = serializer.validated_data['razorpay_payment_id']
             order_id = serializer.validated_data['razorpay_order_id']
@@ -332,7 +340,15 @@ class VerifyPaymentView(BaseAPIView):
                     data={
                         'subscription_id': subscription.id,
                         'course_name': subscription.course.name,
-                        'batch': enrollment.batch
+                        'batch': enrollment.batch,
+                        'start_date': str(enrollment.start_date),
+                        'end_date': str(enrollment.end_date),
+                        'start_time': str(enrollment.start_time) if enrollment.start_time else None,
+                        'end_time': str(enrollment.end_time) if enrollment.end_time else None,
+                        'saturday_start_time': str(enrollment.saturday_start_time) if enrollment.saturday_start_time else None,
+                        'saturday_end_time': str(enrollment.saturday_end_time) if enrollment.saturday_end_time else None,
+                        'sunday_start_time': str(enrollment.sunday_start_time) if enrollment.sunday_start_time else None,
+                        'sunday_end_time': str(enrollment.sunday_end_time) if enrollment.sunday_end_time else None
                     },
                     status_code=status.HTTP_200_OK
                 )
@@ -375,7 +391,15 @@ class VerifyPaymentView(BaseAPIView):
                 data={
                     'subscription_id': subscription.id,
                     'course_name': subscription.course.name,
-                    'batch': enrollment.batch
+                    'batch': enrollment.batch,
+                    'start_date': str(enrollment.start_date),
+                    'end_date': str(enrollment.end_date),
+                    'start_time': str(enrollment.start_time) if enrollment.start_time else None,
+                    'end_time': str(enrollment.end_time) if enrollment.end_time else None,
+                    'saturday_start_time': str(enrollment.saturday_start_time) if enrollment.saturday_start_time else None,
+                    'saturday_end_time': str(enrollment.saturday_end_time) if enrollment.saturday_end_time else None,
+                    'sunday_start_time': str(enrollment.sunday_start_time) if enrollment.sunday_start_time else None,
+                    'sunday_end_time': str(enrollment.sunday_end_time) if enrollment.sunday_end_time else None
                 },
                 status_code=status.HTTP_200_OK
             )

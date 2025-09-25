@@ -12,14 +12,14 @@ import {
   useTheme,
   Persona,
   IconButton,
-  
-
+ 
+ 
 } from '@fluentui/react'
-import { 
-  FaMicrophone, 
-  FaMicrophoneSlash, 
-  FaVideo, 
-  FaVideoSlash   
+import {
+  FaMicrophone,
+  FaMicrophoneSlash,
+  FaVideo,
+  FaVideoSlash  
 } from 'react-icons/fa'
 import fscreen from 'fscreen'
 import {
@@ -32,20 +32,21 @@ import {
   dummyVideoDevice,
   startMediaDevice,
   stopMediaDevice,
+ 
 } from '../../../redux/meetingSlice'
 import './index.css'
-
+ 
 const pivotStyles = { itemContainer: { padding: '.5em', width: '300px', height: '225px' } }
-
+ 
 function VideoPreview() {
   const [mediaBtnsDisabled, setMediaBtnsDisabled] = useState(false)
   const [userStream, currentCameraId, currentMicId, audioDevices, videoDevices, preferences] =
     useLocalState(state => [state.userStream, state.currentCameraId, state.currentMicId, state.audioDevices, state.videoDevices, state.preferences])
-
+ 
   const audioDevice = audioDevices.find(d => d.deviceId === currentMicId)
   const videoDevice = videoDevices.find(d => d.deviceId === currentCameraId)
   const mediaInfo = [videoDevice?.label, audioDevice?.label].filter(Boolean).join('\n').trim()
-
+ 
   return (
     <div className="prejoin-card">
       <div className="prejoin-header">
@@ -93,7 +94,7 @@ function VideoPreview() {
         </div>
   )
 }
-
+ 
 // function CreateMeeting() {
 //   const navigate = useNavigate()
 //   const [userNameError, setUserNameError] = useState('')
@@ -114,7 +115,7 @@ function VideoPreview() {
 //       finally { socket.off('action:room_connection_established', onEstablished) }
 //     }
 //     socket.once('action:room_connection_established', onEstablished)
-//     socket.emit('request:create_room', { room }, err => {
+//     socket.emit('request:create_room', { room ,sessionId}, err => {
 //       if (err) setState({ error: err.message })
 //       setState({ loading: false })
 //     })
@@ -133,7 +134,7 @@ function VideoPreview() {
 //     </Stack>
 //   )
 // }
-
+ 
 function JoinMeeting() {
   const navigate = useNavigate()
   const [userNameError, setUserNameError] = useState('')
@@ -143,28 +144,52 @@ function JoinMeeting() {
   const { loading, error, userName, roomId } = useJoinFormState()
   const setState = useJoinFormState.setState
   const params = useParams()
-
-  useEffect(() => { const preset = params?.roomId; if (preset) setState({ roomId: preset }) }, [params, setState])
-
-  const handleSubmit = useCallback(e => {
-    e.preventDefault()
-    if (!userName.trim()) { setUserNameError('Please enter your name'); return }
-    if (loading) return
-    setState({ loading: true, error: null })
-    socket.emit('request:join_room', { userName, roomId }, err => {
-      if (err) setState({ error: err.message })
-      setState({ loading: false })
-      if (!err) navigate(`/live-class/session/${roomId}`)
-    })
-    useLocalState.setState({ preferences: { ...preferences, userName } })
-  }, [loading, preferences, roomId, userName, socket, navigate, setState])
-
+  // console.log('JoinMeeting params:', params)
+ 
+useEffect(() => {
+  const presetRoomId = params?.roomId
+  if (presetRoomId) {
+    setState({ roomId: presetRoomId })
+    // setSessionId(presetRoomId) // <-- use roomId as sessionId
+    console.log('[JoinMeeting] Using roomId as sessionId:', presetRoomId)
+  }
+}, [params, setState])
+ 
+ 
+ const handleSubmit = useCallback(e => {
+  e.preventDefault()
+  if (!userName.trim()) { setUserNameError('Please enter your name'); return }
+  if (loading) return
+ 
+  const sessionId = useLocalState.getState().sessionId  // take from store
+  if (!sessionId) {
+    setState({ error: 'Missing session ID from frontend params' })
+    return
+  }
+  console.log("roomId",roomId,sessionId,"dd")
+ 
+  setState({ loading: true, error: null })
+ 
+socket.emit('request:join_room', {
+  userName,
+  roomId,      
+  sessionId  
+}, err => {
+  if (err) setState({ error: err.message })
+  setState({ loading: false })
+  if (!err) navigate(`/live-class/session/${roomId}`)
+})
+ 
+  useLocalState.setState({ preferences: { ...preferences, userName } })
+}, [loading, preferences, userName, socket, navigate, setState])
+ 
+ 
   return (
     <Stack>
       <form onSubmit={handleSubmit}>
         {/* Hidden room id field for functionality retained */}
         {/* <TextField styles={{ root: { marginBottom: 10 } }} value={roomId} onChange={(_, v = '') => setState({ roomId: v })} label="Meeting link or id" required /> */}
-        <TextField value={userName} onChange={(_, v = '') => { setState({ userName: v }); if (userNameError) setUserNameError('') }} placeholder="Your name" errorMessage={userNameError} 
+        <TextField value={userName} onChange={(_, v = '') => { setState({ userName: v }); if (userNameError) setUserNameError('') }} placeholder="Your name" errorMessage={userNameError}
         className='custom-class' />
         <Label style={{ color: theme.palette.red }}>{error}</Label>
         <PrimaryButton type="submit" styles={{ root: { marginTop: 10, width: '100%' } }}>{loading ? 'Joining…' : 'Join now'}</PrimaryButton>
@@ -172,10 +197,36 @@ function JoinMeeting() {
     </Stack>
   )
 }
-
+ 
 export default function Landing() {
   const params = useParams()
-  useEffect(() => { if (fscreen.fullscreenElement) fscreen.exitFullscreen() }, [])
+  const navigate = useNavigate()
+  const socket = useRemoteState(state => state.socket)
+  const { userName } = useJoinFormState()
+  const room = useRemoteState(state => state.room)
+  const sessionId = useLocalState(state => state.sessionId)
+ 
+  useEffect(() => {
+    if (fscreen.fullscreenElement) fscreen.exitFullscreen()
+    if (room?.id && userName) {
+      console.log('[Landing] Attempting to rejoin room:', room.id, 'sessionId:', sessionId)
+      socket.emit('request:join_room', {
+        userName,
+        roomId: room.id,
+        sessionId
+      }, err => {
+        if (err) {
+          toast('Failed to rejoin room', { type: ToastType.error, body: err.message })
+          sessionStorage.removeItem('mooz-room')
+          useRemoteState.setState({ room: null })
+          navigate('/')
+        } else {
+          navigate(`/live-class/session/${room.id}`)
+        }
+      })
+    }
+  }, [room, userName, socket, navigate, sessionId])
+ 
   return (
     <div className="prejoin-container">
       <VideoPreview />
@@ -186,3 +237,4 @@ export default function Landing() {
     </div>
   )
 }
+ 
