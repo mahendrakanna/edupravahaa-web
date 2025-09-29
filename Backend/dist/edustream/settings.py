@@ -204,6 +204,7 @@ SIMPLE_JWT = {
 CORS_ALLOW_ALL_ORIGINS = True
 CSRF_TRUSTED_ORIGINS = [
     "https://edupravahaa-tech-courses.com",
+    "https://api.edupravahaa-tech-courses.com",
 ]
 # CORS_ALLOW_CREDENTIALS = True
 # CORS_ALLOW_ALL_ORIGINS = DEBUG
