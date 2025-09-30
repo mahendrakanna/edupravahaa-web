@@ -200,6 +200,11 @@
   .course-card {
     height: auto; /* allow wrapping on small screens */
   }
+   .course-modal-body .d-flex.justify-content-between {
+    flex-direction: column;   
+    align-items: flex-start;  
+    gap: 0.25rem;             
+  }
 
   // .course-footer {
   //   flex-direction: column;
