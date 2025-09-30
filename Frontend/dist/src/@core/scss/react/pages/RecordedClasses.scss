@@ -123,7 +123,7 @@
   border-radius: 16px;
   overflow: hidden;
   box-shadow: 0 4px 12px rgba($black, 0.06);
-  padding: 12px;
+  padding-bottom: 12px;
   display: flex;
   flex-direction: column;
 
@@ -136,7 +136,7 @@
 
   .video-wrapper {
     position: relative;
-    border-radius: 12px;
+    // border-radius: 12px;
     overflow: hidden;
 
     .video-player {
@@ -144,7 +144,7 @@
       aspect-ratio: 16/9;
       object-fit: cover;
       background-color: $black;
-      border-radius: 12px;
+      // border-top-left-radius: 12px;
     }
 
     .video-overlay-controls {

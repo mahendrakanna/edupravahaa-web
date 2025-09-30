@@ -25,6 +25,7 @@ import { useState } from 'react'
 import toast from 'react-hot-toast'
 import { forgotPassword, sendOtp, verifyOtp } from '../../../redux/authentication'
 import UILoader from '@src/@core/components/ui-loader'
+import themeConfig from '@configs/themeConfig'
 
 const ForgotPassword = () => {
   // ** Hooks
@@ -161,27 +162,11 @@ const handleResetPassword = (e) => {
         <Row className='auth-inner m-0'>
           {/* Logo */}
           <Link className='brand-logo' to='/' onClick={e => e.preventDefault()}>
-            <svg viewBox='0 0 139 95' version='1.1' height='28'>
-              <defs>
-                <linearGradient x1='100%' y1='10.512%' x2='50%' y2='89.487%' id='linearGradient-1'>
-                  <stop stopColor='#000000' offset='0%'></stop>
-                  <stop stopColor='#FFFFFF' offset='100%'></stop>
-                </linearGradient>
-              </defs>
-              <g id='Page-1' stroke='none' strokeWidth='1' fill='none' fillRule='evenodd'>
-                <g id='Artboard' transform='translate(-400.000000, -178.000000)'>
-                  <g id='Group' transform='translate(400.000000, 178.000000)'>
-                    <path
-                      d='M0,0 L39,0 L69,32 L101,0 L139,0 L139,30 C138,37 136,43 132,45 C129,48 112,65 83,94 L56,94 L7,44 C2,40 0,35 0,30 C0,24 0,15 0,0 Z'
-                      className='text-primary'
-                      style={{ fill: 'currentColor' }}
-                    ></path>
-                  </g>
-                </g>
-              </g>
-            </svg>
-            <h2 className='brand-text text-primary ms-1'>Edu Pravaha</h2>
-          </Link>
+          {/* <span className='brand-logo'> */}
+              <img src={themeConfig.app.appLogoImage} alt='logo' height={30} width={30} />
+            {/* </span> */}
+          <h2 className='brand-text text-primary ms-1'>Edu Pravahaa</h2>
+        </Link>
 
           {/* Illustration */}
           <Col className='d-none d-lg-flex align-items-center p-5' lg='8' sm='12'>

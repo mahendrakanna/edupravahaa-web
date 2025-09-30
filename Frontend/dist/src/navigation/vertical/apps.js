@@ -21,7 +21,7 @@ export default [
   {
     id:'studnet',
     title: 'student dashboard',
-    icon: <FileText size={20} />,
+    icon: <Home size={20} />,
     navLink: '/student-dashboard',
     roles: ['student']
   },

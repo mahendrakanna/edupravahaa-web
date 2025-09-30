@@ -4,6 +4,8 @@
   import { fetchRecordedVideos } from "../../../redux/recordedVideosSlice";
   import { Spinner } from "reactstrap";
   import '@styles/react/pages/RecordedClasses.scss'
+import SpinnerComponent from "../../../@core/components/spinner/Fallback-spinner";
+import ComponentSpinner from "../../../@core/components/spinner/Loading-spinner";
 
   const RecordedClasses = () => {
     const [selectedCourse, setSelectedCourse] = useState(null);
@@ -39,7 +41,7 @@
     return (
       <div className="recorded-container">
         
-              {loading && (
+              {/* {loading && (
               <div
                 className="d-flex justify-content-center align-items-center"
                 style={{
@@ -54,7 +56,12 @@
               >
                 <Spinner style={{ width: "3rem", height: "3rem" }} color="primary" />
               </div>
-            )}
+            )} */}
+            {loading && (
+      <ComponentSpinner/>
+    )}
+     {/* {loading && <SpinnerComponent />} */}
+
         {/* Show course list */}
         {!selectedCourse ? (
           <div className="courses-grid">
@@ -183,15 +190,32 @@
       setIsMuted(v.muted);
     };
 
-    const onSeek = (e) => {
-      const v = videoRefs.current[refKey];
-      if (!v) return;
-      const rect = progressRef.current.getBoundingClientRect();
-      const ratio = Math.min(Math.max(0, (e.clientX - rect.left) / rect.width), 1);
-      const t = ratio * (v.duration || 0);
-      v.currentTime = t;
-      setCurrent(t);
-    };
+const onSeek = (e) => {
+  const v = videoRefs.current[refKey];
+  if (!v || !progressRef.current) return;
+
+  const updateSeek = (clientX) => {
+    const rect = progressRef.current.getBoundingClientRect();
+    const ratio = Math.min(Math.max(0, (clientX - rect.left) / rect.width), 1);
+    const t = ratio * (v.duration || 0);
+    v.currentTime = t;
+    setCurrent(t);
+  };
+
+  // Start seeking on mouse down
+  updateSeek(e.clientX);
+
+  const onMove = (moveEvent) => updateSeek(moveEvent.clientX);
+  const onUp = () => {
+    document.removeEventListener("mousemove", onMove);
+    document.removeEventListener("mouseup", onUp);
+  };
+
+  document.addEventListener("mousemove", onMove);
+  document.addEventListener("mouseup", onUp);
+};
+ 
+
 
     return (
       <div className="video-card">
@@ -218,7 +242,7 @@
               <FaExpand />
             </button>
           </div>
-          <div className="progress-bar" ref={progressRef} onClick={onSeek}>
+          <div className="progress-bar" ref={progressRef} onMouseDown={onSeek}   >
             <div
               className="progress-fill"
               style={{ width: `${duration ? (current / duration) * 100 : 0}%` }}

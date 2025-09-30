@@ -260,54 +260,54 @@ export function getLandingDefaults() { const hash = window.location.hash; if (ha
  
 //   return socket;
 // }
-export function createSocket() {
-  // Use VITE_SOCKET_URL from env, fallback to same-origin
-  const env = (typeof import.meta !== 'undefined' && import.meta.env) || {};
-  const socketUrl = env.VITE_SOCKET_URL || ''; // fallback to same-origin if not set
+  export function createSocket() {
+    // Use VITE_SOCKET_URL from env, fallback to same-origin
+    const env = (typeof import.meta !== 'undefined' && import.meta.env) || {};
+    const socketUrl = env.VITE_SOCKET_URL || ''; // fallback to same-origin if not set
 
-  const socket = io(socketUrl, {
-    path: '/socket.io/',
-    transports: ['websocket'],
-    auth: (cb) => {
-      const { sessionId } = useLocalState.getState();
-      const { id: currentRoomId } = useRemoteState.getState().room || {};
-      const token = localStorage.getItem('access') || '';
-      const rawUserData = localStorage.getItem('userData');
-      const userData = rawUserData ? JSON.parse(rawUserData) : null;
-      const userRole = userData?.role || null;
+    const socket = io(socketUrl, {
+      path: '/socket.io/',
+      transports: ['websocket'],
+      auth: (cb) => {
+        const { sessionId } = useLocalState.getState();
+        const { id: currentRoomId } = useRemoteState.getState().room || {};
+        const token = localStorage.getItem('access') || '';
+        const rawUserData = localStorage.getItem('userData');
+        const userData = rawUserData ? JSON.parse(rawUserData) : null;
+        const userRole = userData?.role || null;
 
-      console.log('createSocket auth:', { sessionId, currentRoomId, token, userRole });
+        console.log('createSocket auth:', { sessionId, currentRoomId, token, userRole });
 
-      cb({ sessionId, currentRoomId, token, userRole });
-    },
-  });
+        cb({ sessionId, currentRoomId, token, userRole });
+      },
+    });
 
-  socket.onAny((event, ...args) => debug(`socket.io: '${event}'`, ...args));
+    socket.onAny((event, ...args) => debug(`socket.io: '${event}'`, ...args));
 
-  socket.on('connect_error', (error) => {
-    let message = 'Connection failed';
+    socket.on('connect_error', (error) => {
+      let message = 'Connection failed';
 
-    // Safely parse JSON-like error message
-    try {
-      const parsed = JSON.parse(error.message.replace(/'/g, '"'));
-      if (parsed?.message) message = parsed.message;
-      else message = error.message;
-    } catch {
-      message = error.message || message;
-    }
+      // Safely parse JSON-like error message
+      try {
+        const parsed = JSON.parse(error.message.replace(/'/g, '"'));
+        if (parsed?.message) message = parsed.message;
+        else message = error.message;
+      } catch {
+        message = error.message || message;
+      }
 
-    toast(message, { type: ToastType.error, autoClose: Timeout.MEDIUM });
-    debug(`socket.io: connect_error`, error);
-    console.error('Socket connection error:', error);
-  });
+      toast(message, { type: ToastType.error, autoClose: Timeout.MEDIUM });
+      debug(`socket.io: connect_error`, error);
+      console.error('Socket connection error:', error);
+    });
 
-  socket.on('error', (error) => {
-    console.error('Socket error event:', error);
-  });
+    socket.on('error', (error) => {
+      console.error('Socket error event:', error);
+    });
 
-  return socket;
-}
- 
+    return socket;
+  }
+  
 export const useRemoteState = create(() => ({ socket: createSocket(), room: null, connections: [] }))
  
 export function setupLocalMediaListeners() {

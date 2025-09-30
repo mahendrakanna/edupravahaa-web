@@ -15,7 +15,7 @@ export const fetchDashboardData = createAsyncThunk(
       if (!token) {
         return rejectWithValue("No access token found");
       }
-
+      console.log(`url: ${API_URL}${apiList.student.student_dashboard}${studentId}`);
       const response = await api.get(
         `${API_URL}${apiList.student.student_dashboard}${studentId}`,
         {

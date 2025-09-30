@@ -15,6 +15,7 @@ import {
 import { fetchTeacherDashboard } from "../../../redux/teacherDashboardSlice";
 
 import MyCourses from '../../apps/mycourses'
+import SpinnerComponent from "../../../@core/components/spinner/Fallback-spinner";
 
 // 🔹 Reusable Stat Item (inline style like DashboardStats)
 const StatItem = ({ icon, color, label, value, unit = "" }) => (
@@ -54,12 +55,7 @@ const TeacherDashboard = () => {
 
   if (loading)
     return (
-      <div
-        className="d-flex justify-content-center align-items-center"
-        style={{ minHeight: "200px" }}
-      >
-        <Spinner color="primary" />
-      </div>
+      <SpinnerComponent />
     );
 
   if (error) {

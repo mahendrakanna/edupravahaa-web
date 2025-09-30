@@ -60,7 +60,7 @@ const CourseCard = ({ course }) => {
        payload.saturday_time = selectedSchedule.saturday_time
        payload.sunday_time = selectedSchedule.sunday_time
      }
-
+     console.log("enroll api", `${BaseUrl}/api/payments/create_order/`, payload)
     const orderResponse = await axios.post(
        `${BaseUrl}/api/payments/create_order/`,
        payload,
@@ -137,7 +137,7 @@ const batchList = groupedBatches ? Object.values(groupedBatches) : []
         ? course.advantages.split(',').map(s => s.trim()).filter(Boolean)
         : [])
 
-      console.log("courses", course, batchList)
+      // console.log("courses", course, batchList)
   return (
     <>
       <Card className="shadow-sm h-100 course-card">
