@@ -381,6 +381,14 @@ class VerifyPaymentView(BaseAPIView):
             subscription.payment_response = params_dict
             subscription.payment_completed_at = timezone.now()
             subscription.save()
+
+            # ✅ Update user (make is_trial = False and has_purchased = True)
+            user = request.user
+            if user.role == 'student':
+                user.has_purchased_courses = True
+                user.trial_end_date = None  # optional: disable trial immediately
+                user.save(update_fields=['has_purchased_courses', 'trial_end_date'])
+                user.save(update_fields=['has_purchased_courses', 'trial_end_date'])
             
             enrollment = CourseEnrollment.objects.get(subscription=subscription)
             

@@ -206,6 +206,7 @@ CSRF_TRUSTED_ORIGINS = [
     "https://edupravahaa-tech-courses.com",
     "https://api.edupravahaa-tech-courses.com",
 ]
+ALLOWED_HOSTS = ["api.edupravahaa-tech-courses.com", "localhost", "127.0.0.1"]
 # CORS_ALLOW_CREDENTIALS = True
 # CORS_ALLOW_ALL_ORIGINS = DEBUG
 

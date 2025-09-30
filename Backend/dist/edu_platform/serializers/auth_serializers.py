@@ -582,13 +582,12 @@ class RegisterSerializer(serializers.Serializer):
         )
         user.set_password(password)
         # Set trial period only for student users
-        if user.role == 'student':
-            if TRIAL_TEST_MODE:
-                user.trial_end_date = timezone.now() + timedelta(minutes=TRIAL_DURATION_MINUTES)
-                logger.info(f"User {user.id} (student) trial set to {TRIAL_DURATION_MINUTES} minutes")
-            else:
-                user.trial_end_date = timezone.now() + timedelta(days=TRIAL_DURATION_DAYS)
-                logger.info(f"User {user.id} (student) trial set to {TRIAL_DURATION_DAYS} days") 
+        if TRIAL_TEST_MODE:
+            user.trial_end_date = timezone.now() + timedelta(minutes=TRIAL_DURATION_MINUTES)
+            logger.info(f"User {user.id} (student) trial set to {TRIAL_DURATION_MINUTES} minutes")
+        else:
+            user.trial_end_date = timezone.now() + timedelta(days=TRIAL_DURATION_DAYS)
+            logger.info(f"User {user.id} (student) trial set to {TRIAL_DURATION_DAYS} days") 
         user.save()
         StudentProfile.objects.create(user=user)
         
