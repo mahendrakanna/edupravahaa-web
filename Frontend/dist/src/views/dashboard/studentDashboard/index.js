@@ -186,7 +186,7 @@ const StudentDashboard = () => {
       </div>
 
       {/* Certificates */}
-      {certificates?.length > 0 && (
+      {/* {certificates?.length > 0 && (
         <div className="certificates">
           <h5 className="fw-bold mb-3">Certificates</h5>
           {certificates.map((cert, index) => (
@@ -204,7 +204,7 @@ const StudentDashboard = () => {
             </div>
           ))}
         </div>
-      )}
+      )} */}
     </div>
   );
 };

@@ -8,6 +8,7 @@ from edu_platform.models import User, ClassSession, ClassSchedule, CourseEnrollm
 from asgiref.sync import sync_to_async
 from rest_framework_simplejwt.exceptions import InvalidToken, TokenError
 from rest_framework_simplejwt.tokens import AccessToken
+import os 
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
