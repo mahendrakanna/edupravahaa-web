@@ -326,19 +326,19 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
                 'message_type': 'error'
             })
         
-        # Check for phone number update payload
-        if 'identifier' in request.data or 'otp_code' in request.data or 'purpose' in request.data:
-            expected_fields = {'identifier', 'otp_code', 'purpose'}
-            if set(request_data_keys) != expected_fields:
-                raise serializers.ValidationError({
-                    'message': 'Phone number update requires only identifier, otp_code, and purpose fields.',
-                    'message_type': 'error'
-                })
-            if not all(key in request.data for key in expected_fields):
-                raise serializers.ValidationError({
-                    'message': 'Must provide identifier, otp_code, and purpose for phone number updates.',
-                    'message_type': 'error'
-                })
+        # # Check for phone number update payload
+        # if 'identifier' in request.data or 'otp_code' in request.data or 'purpose' in request.data:
+        #     expected_fields = {'identifier', 'otp_code', 'purpose'}
+        #     if set(request_data_keys) != expected_fields:
+        #         raise serializers.ValidationError({
+        #             'message': 'Phone number update requires only identifier, otp_code, and purpose fields.',
+        #             'message_type': 'error'
+        #         })
+        #     if not all(key in request.data for key in expected_fields):
+        #         raise serializers.ValidationError({
+        #             'message': 'Must provide identifier, otp_code, and purpose for phone number updates.',
+        #             'message_type': 'error'
+        #         })
         
         return attrs
 
@@ -375,7 +375,8 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
         for attr, value in validated_data.items():
             if attr == 'password':
                 instance.set_password(value)
-            elif attr == 'username':
+            # elif attr == 'username':
+            else:
                 setattr(instance, attr, value)
         instance.save()
 
@@ -431,68 +432,73 @@ class ProfileUpdateSerializer(serializers.ModelSerializer):
                         'message': f'Failed to update profile: {str(e)}',
                         'message_type': 'error'
                     })
+        
+        # Update phone number // remove this from here and uncomment above and below code when using otp verification.
+        instance.phone_number = identifier
+        instance.phone_verified = True
+        instance.save()
 
-        # Update phone number with OTP verification
-        if identifier and otp_code and purpose:
-            try:
-                identifier_type = 'phone'
-                identifier, identifier_type = validate_identifier_utility(identifier, identifier_type)
-                
-                # Check if phone number already exists
-                if User.objects.filter(phone_number=identifier).exclude(id=instance.id).exists():
-                    phone_update_success = False
-                    phone_update_error = {
-                        'message': 'This phone number is already registered.',
-                        'message_type': 'error'
-                    }
-                    raise serializers.ValidationError(phone_update_error)
-
-                # Verify OTP
-                otp = OTP.objects.filter(
-                    identifier=identifier,
-                    otp_type=identifier_type,
-                    purpose=purpose,
-                    otp_code=otp_code
-                ).order_by('-created_at').first()
-
-                if not otp:
-                    phone_update_success = False
-                    phone_update_error = {
-                        'message': 'Invalid OTP.',
-                        'message_type': 'error'
-                    }
-                    raise serializers.ValidationError(phone_update_error)
-                if otp.is_expired:
-                    phone_update_success = False
-                    phone_update_error = {
-                        'message': 'OTP has expired.',
-                        'message_type': 'error'
-                    }
-                    raise serializers.ValidationError(phone_update_error)
-
-                # Update phone number
-                instance.phone_number = identifier
-                instance.phone_verified = True
-                instance.save()
-
-                # Mark OTP as verified and delete
-                otp.is_verified = True
-                otp.save()
-                OTP.objects.filter(
-                    identifier=identifier,
-                    otp_type=identifier_type,
-                    purpose=purpose
-                ).delete()
-
-            except serializers.ValidationError as e:
-                raise
-            except Exception as e:
-                phone_update_success = False
-                phone_update_error = {
-                    'message': f'Failed to update phone number: {str(e)}',
-                    'message_type': 'error'
-                }
-                raise serializers.ValidationError(phone_update_error)
+        # Update phone number with OTP verification (commented out as per request)
+        # if identifier and otp_code and purpose:
+        #     try:
+        #         identifier_type = 'phone'
+        #         identifier, identifier_type = validate_identifier_utility(identifier, identifier_type)
+        #         
+        #         # Check if phone number already exists
+        #         if User.objects.filter(phone_number=identifier).exclude(id=instance.id).exists():
+        #             phone_update_success = False
+        #             phone_update_error = {
+        #                 'message': 'This phone number is already registered.',
+        #                 'message_type': 'error'
+        #             }
+        #             raise serializers.ValidationError(phone_update_error)
+        #
+        #         # Verify OTP
+        #         otp = OTP.objects.filter(
+        #             identifier=identifier,
+        #             otp_type=identifier_type,
+        #             purpose=purpose,
+        #             otp_code=otp_code
+        #         ).order_by('-created_at').first()
+        #
+        #         if not otp:
+        #             phone_update_success = False
+        #             phone_update_error = {
+        #                 'message': 'Invalid OTP.',
+        #                 'message_type': 'error'
+        #             }
+        #             raise serializers.ValidationError(phone_update_error)
+        #         if otp.is_expired:
+        #             phone_update_success = False
+        #             phone_update_error = {
+        #                 'message': 'OTP has expired.',
+        #                 'message_type': 'error'
+        #             }
+        #             raise serializers.ValidationError(phone_update_error)
+        #
+        #         # Update phone number
+        #         instance.phone_number = identifier
+        #         instance.phone_verified = True
+        #         instance.save()
+        #
+        #         # Mark OTP as verified and delete
+        #         otp.is_verified = True
+        #         otp.save()
+        #         OTP.objects.filter(
+        #             identifier=identifier,
+        #             otp_type=identifier_type,
+        #             purpose=purpose
+        #         ).delete()
+        #
+        #     except serializers.ValidationError as e:
+        #         raise
+        #     except Exception as e:
+        #         phone_update_success = False
+        #         phone_update_error = {
+        #             'message': f'Failed to update phone number: {str(e)}',
+        #             'message_type': 'error'
+        #         }
+        #         raise serializers.ValidationError(phone_update_error)
 
         # Store phone update status in instance for view to check
         instance.phone_update_success = phone_update_success
@@ -555,17 +561,18 @@ class RegisterSerializer(serializers.Serializer):
                 'message_type': 'error'
             })
 
-        if not OTP.objects.filter(
-            identifier=phone_number,
-            otp_type='phone',
-            purpose='registration',
-            is_verified=True,
-            expires_at__gt=timezone.now()
-        ).exists():
-            raise serializers.ValidationError({
-                'message': 'Phone OTP not verified or expired.',
-                'message_type': 'error'
-            })
+        # uncommented below code when using otp verification
+        # if not OTP.objects.filter(
+        #     identifier=phone_number,
+        #     otp_type='phone',
+        #     purpose='registration',
+        #     is_verified=True,
+        #     expires_at__gt=timezone.now()
+        # ).exists():
+        #     raise serializers.ValidationError({
+        #         'message': 'Phone OTP not verified or expired.',
+        #         'message_type': 'error'
+        #     })
 
         return attrs
     
