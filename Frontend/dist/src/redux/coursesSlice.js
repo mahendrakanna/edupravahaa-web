@@ -40,6 +40,7 @@ export const fetchCourses = createAsyncThunk(
 export const enrollCourse = createAsyncThunk(
   "courses/enrollCourse",
   async ({ course, selectedSchedule, razorpay_key }, { rejectWithValue, getState, dispatch }) => {
+    console.log("razorpay_key in thunk", razorpay_key);
     try {
       const { auth } = getState();
       const token = auth?.token;

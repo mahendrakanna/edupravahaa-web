@@ -130,14 +130,16 @@ const CourseCard = ({ course }) => {
 
     setEnrolling(true);
     try {
+      console.log("razorpay_key",razorpay_key)
       await dispatch(
         enrollCourse({ course, selectedSchedule, razorpay_key })
       ).unwrap();
 
       // ✅ optional: close modal or redirect
       setModal(false);
-      dispatch(fetchCourses())
       dispatch(getTrialPeriod())
+      dispatch(fetchCourses())
+      
     } catch (error) {
       console.error("Enroll failed:", error);
       // toast.error handled in thunk

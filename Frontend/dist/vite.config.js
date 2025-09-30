@@ -15,7 +15,7 @@ export default () => {
       port: 3000,
       proxy: {
         '/socket.io': {
-          target: 'http://localhost:5005',
+          target: 'https://api.edupravahaa-tech-courses.com',
           changeOrigin: true,
           ws: true,
         },
