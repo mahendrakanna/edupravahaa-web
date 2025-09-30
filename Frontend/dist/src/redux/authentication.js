@@ -134,9 +134,9 @@ export const refreshTokenThunk = createAsyncThunk(
       if (!refreshToken) {
         return rejectWithValue('No refresh token found');
       }
-      console.log("refresh api", `${API_URL}${apiList.auth.refreshToken}`);
-      const response = await axios.post(
-        `${API_URL}${apiList.auth.refreshToken}`,
+
+      const response = await api.post(
+        apiList.auth.refreshToken,
         { refresh: refreshToken },
         { headers: { 'Content-Type': 'application/json' } }
       );
@@ -147,6 +147,7 @@ export const refreshTokenThunk = createAsyncThunk(
     }
   }
 );
+
 
 export const updatePassword = createAsyncThunk(
   'auth/updatePassword',
