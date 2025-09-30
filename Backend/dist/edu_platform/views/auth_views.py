@@ -21,6 +21,7 @@ from edu_platform.serializers.auth_serializers import (
 )
 import logging
 import phonenumbers
+import boto3, botocore
 
 logger = logging.getLogger(__name__)
 
@@ -170,21 +171,65 @@ class SendOTPView(generics.GenericAPIView):
             )
             
         else:  # phone
-            # Send SMS using Twilio service
-            sms_sent = False
-            using_console = False
+            # # Send SMS using Twilio service
+            # sms_sent = False
+            # using_console = False
             
+            # try:
+            #     sms_service = get_sms_service()
+            #     message = f'Your OTP for {purpose.replace("_", " ").title()} is: {otp.otp_code}\nValid for 10 minutes.'
+                
+            #     # Check if using console-based SMS service
+            #     using_console = isinstance(sms_service, ConsoleSMSService)
+                
+            #     # Attempt to send SMS
+            #     sms_sent = sms_service.send_sms(identifier, message)
+                
+            #     # Handle SMS failure in production
+            #     if not sms_sent and not settings.DEBUG:
+            #         return api_response(
+            #             message='Failed to send SMS. Please try again.',
+            #             message_type='error',
+            #             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            #         )
+            # except Exception as e:
+            #     logger.error(f"SMS sending error: {str(e)}")
+            #     if not settings.DEBUG:
+            #         return api_response(
+            #             message='SMS service unavailable.',
+            #             message_type='error',
+            #             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            #         )
+            #     using_console = True
+            
+            # Send SMS using AWS SNS
+            sms_sent = False
             try:
-                sms_service = get_sms_service()
+                sns_client = boto3.client(
+                    'sns',
+                    aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+                    aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+                    region_name=settings.AWS_REGION
+                )
                 message = f'Your OTP for {purpose.replace("_", " ").title()} is: {otp.otp_code}\nValid for 10 minutes.'
                 
-                # Check if using console-based SMS service
-                using_console = isinstance(sms_service, ConsoleSMSService)
+                response = sns_client.publish(
+                    PhoneNumber=identifier,
+                    Message=message,
+                    MessageAttributes={
+                        'AWS.SNS.SMS.SenderID': {
+                            'DataType': 'String',
+                            'StringValue': 'OTPService'
+                        },
+                        'AWS.SNS.SMS.SMSType': {
+                            'DataType': 'String',
+                            'StringValue': 'Transactional'
+                        }
+                    }
+                )
                 
-                # Attempt to send SMS
-                sms_sent = sms_service.send_sms(identifier, message)
+                sms_sent = response.get('MessageId') is not None
                 
-                # Handle SMS failure in production
                 if not sms_sent and not settings.DEBUG:
                     return api_response(
                         message='Failed to send SMS. Please try again.',
@@ -192,14 +237,14 @@ class SendOTPView(generics.GenericAPIView):
                         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
                     )
             except Exception as e:
-                logger.error(f"SMS sending error: {str(e)}")
+                logger.error(f"SNS SMS sending error: {str(e)}")
                 if not settings.DEBUG:
                     return api_response(
                         message='SMS service unavailable.',
                         message_type='error',
                         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
                     )
-                using_console = True
+                # using_console = True
             
             data = {
                 'otp_expires_in_seconds': int((otp.expires_at - timezone.now()).total_seconds())
