@@ -222,30 +222,35 @@ const {
   };
 
   // Handle profile update
-  const handleProfileUpdate = async () => {
-    const formDataToSend = new FormData();
-    
-    // Add changed text fields
-    Object.keys(formData).forEach(key => {
-      if (formData[key] !== user[key]) {
+const handleProfileUpdate = async () => {
+  const formDataToSend = new FormData();
+
+  // Add changed text fields
+  Object.keys(formData).forEach(key => {
+    if (formData[key] !== user[key]) {
+      if (key === "phone_number") {
+        // 👇 Send phone_number as identifier
+        formDataToSend.append("identifier", formData[key]);
+        // formDataToSend.append("identifier_type", "phone");
+      } else {
         formDataToSend.append(key, formData[key]);
       }
-    });
+    }
+  });
 
-    console.log("photo",photo,"photoPreview",photoPreview)
-        // Add profile image if selected
-    if (photo) {
-      formDataToSend.append('profile_picture', photo);
-    }
-    
-    // Check if there's any data to update
-    if (formDataToSend.entries().next().done && !photo) {
-      toast.info('No changes to update');
-      return;
-    }
-    
-    executeUpdateProfile(formDataToSend);
-  };
+  // Add profile image if selected
+  if (photo) {
+    formDataToSend.append('profile_picture', photo);
+  }
+
+  if (formDataToSend.entries().next().done && !photo) {
+    toast.info("No changes to update");
+    return;
+  }
+
+  executeUpdateProfile(formDataToSend);
+};
+
 
   // Handle form submit
   const handleSubmit1 = async (e) => {
