@@ -12,8 +12,12 @@ from rest_framework_simplejwt.tokens import AccessToken
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
+REDIS_HOST = os.getenv("REDIS_HOST", "redis")  
+REDIS_PORT = int(os.getenv("REDIS_PORT", 6379))
+
+
 # Initialize Socket.IO server with Redis manager
-mgr = socketio.AsyncRedisManager("redis://13.200.52.218:6379/0")
+mgr = socketio.AsyncRedisManager(f"redis://{REDIS_HOST}:{REDIS_PORT}/0")
 sio = socketio.AsyncServer(
     async_mode="asgi",
     client_manager=mgr,
@@ -24,11 +28,12 @@ sio = socketio.AsyncServer(
 
 # Redis client for participant tracking
 redis_client = aioredis.Redis(
-    host="13.200.52.218",
-    port=6379,
+    host=REDIS_HOST,
+    port=REDIS_PORT,
     db=0,
     decode_responses=True
 )
+ 
 
 @sync_to_async
 def validate_class_session_pk(pk):
