@@ -265,6 +265,8 @@ export function getLandingDefaults() { const hash = window.location.hash; if (ha
     const env = (typeof import.meta !== 'undefined' && import.meta.env) || {};
     const socketUrl = env.VITE_SOCKET_URL || ''; // fallback to same-origin if not set
 
+    console.log("socket url", socketUrl)
+
     const socket = io(socketUrl, {
       path: '/socket.io/',
       transports: ['websocket'],
