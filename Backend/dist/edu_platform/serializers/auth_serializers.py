@@ -3,9 +3,10 @@ from django.contrib.auth import authenticate, get_user_model
 from django.db.models import Q
 from edu_platform.models import User, TeacherProfile, OTP, StudentProfile, Course, ClassSchedule, ClassSession
 from edu_platform.serializers.course_serializers import CourseSerializer
-import re
+import re, os
 from django.utils import timezone
 from datetime import datetime, timedelta
+from dotenv import load_dotenv
 import logging
 import uuid
 
@@ -13,6 +14,12 @@ import uuid
 logger = logging.getLogger(__name__)
 
 User = get_user_model()
+# Load environment variables
+load_dotenv()
+
+TRIAL_TEST_MODE = os.getenv('TRIAL_TEST_MODE', 'False').lower() == 'true'
+TRIAL_DURATION_DAYS = int(os.getenv('TRIAL_DURATION_DAYS', 2))
+TRIAL_DURATION_MINUTES = int(os.getenv('TRIAL_DURATION_MINUTES', 180))
 
 
 def validate_identifier_utility(value, identifier_type=None):
@@ -574,6 +581,14 @@ class RegisterSerializer(serializers.Serializer):
             phone_verified=True
         )
         user.set_password(password)
+        # Set trial period only for student users
+        if user.role == 'student':
+            if TRIAL_TEST_MODE:
+                user.trial_end_date = timezone.now() + timedelta(minutes=TRIAL_DURATION_MINUTES)
+                logger.info(f"User {user.id} (student) trial set to {TRIAL_DURATION_MINUTES} minutes")
+            else:
+                user.trial_end_date = timezone.now() + timedelta(days=TRIAL_DURATION_DAYS)
+                logger.info(f"User {user.id} (student) trial set to {TRIAL_DURATION_DAYS} days") 
         user.save()
         StudentProfile.objects.create(user=user)
         
