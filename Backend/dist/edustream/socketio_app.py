@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 # Initialize Socket.IO server with Redis manager
-mgr = socketio.AsyncRedisManager("redis://localhost:6379/0")
+mgr = socketio.AsyncRedisManager("redis://13.200.52.218:6379/0")
 sio = socketio.AsyncServer(
     async_mode="asgi",
     client_manager=mgr,
@@ -24,7 +24,7 @@ sio = socketio.AsyncServer(
 
 # Redis client for participant tracking
 redis_client = aioredis.Redis(
-    host="localhost",
+    host="13.200.52.218",
     port=6379,
     db=0,
     decode_responses=True
