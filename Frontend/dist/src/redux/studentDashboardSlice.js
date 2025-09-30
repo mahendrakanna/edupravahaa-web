@@ -2,8 +2,6 @@ import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import apiList from "../../api.json";
 import api from "../utility/api";
 
-const API_URL = import.meta.env.VITE_API_BASE_URL;
-
 // --- Thunk: Fetch Dashboard Data ---
 export const fetchDashboardData = createAsyncThunk(
   "dashboard/fetchDashboardData",
@@ -15,9 +13,9 @@ export const fetchDashboardData = createAsyncThunk(
       if (!token) {
         return rejectWithValue("No access token found");
       }
-      console.log(`url: ${API_URL}${apiList.student.student_dashboard}${studentId}`);
+      console.log(`url student: ${apiList.student.student_dashboard}${studentId}`);
       const response = await api.get(
-        `${API_URL}${apiList.student.student_dashboard}${studentId}`,
+        `${apiList.student.student_dashboard}${studentId}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -25,7 +23,6 @@ export const fetchDashboardData = createAsyncThunk(
         }
       );
 
-      // ✅ API already returns final data structure from doc
       return response.data;
     } catch (error) {
       return rejectWithValue(error.response?.data || error.message);
@@ -57,7 +54,7 @@ const dashboardSlice = createSlice({
       })
       .addCase(fetchDashboardData.fulfilled, (state, action) => {
         state.loading = false;
-        const payload = action.payload.data;
+        const payload = action.payload?.data || action.payload;
 
         if (payload) {
           state.studentName = payload.student_name || "";

@@ -20,7 +20,7 @@ import {
 } from "reactstrap"
 import { FaCheckCircle, FaChartLine, FaClock } from "react-icons/fa"
 import toast from "react-hot-toast"
-import { fetchCourses } from "../../../redux/coursesSlice"
+import { enrollCourse, fetchCourses } from "../../../redux/coursesSlice"
 import { getTrialPeriod } from "../../../redux/authentication"
 
 const CourseCard = ({ course }) => {
@@ -39,88 +39,112 @@ const CourseCard = ({ course }) => {
   const navigate = useNavigate()
   const dispatch = useDispatch()
 
-  const handleEnroll = async () => {
-    if (!selectedSchedule) {
-      toast.error("Please select a schedule before enrolling")
-      return
-    }
+  // const handleEnroll = async () => {
+  //   if (!selectedSchedule) {
+  //     toast.error("Please select a schedule before enrolling")
+  //     return
+  //   }
 
-    setEnrolling(true)
-    try {
-       const payload = {
-       course_id: course.id,
-       batch: selectedSchedule.type,
-       start_date: selectedSchedule.batchStartDate,
-       end_date: selectedSchedule.batchEndDate,
-     }
+  //   setEnrolling(true)
+  //   try {
+  //      const payload = {
+  //      course_id: course.id,
+  //      batch: selectedSchedule.type,
+  //      start_date: selectedSchedule.batchStartDate,
+  //      end_date: selectedSchedule.batchEndDate,
+  //    }
 
-    if (selectedSchedule.type === "weekdays") {
-       payload.time = selectedSchedule.time
-     } else if (selectedSchedule.type === "weekends") {
-       payload.saturday_time = selectedSchedule.saturday_time
-       payload.sunday_time = selectedSchedule.sunday_time
-     }
-     console.log("enroll api", `${BaseUrl}/api/payments/create_order/`, payload)
-    const orderResponse = await axios.post(
-       `${BaseUrl}/api/payments/create_order/`,
-       payload,
-       { headers: { Authorization: `Bearer ${token}` } }
+  //   if (selectedSchedule.type === "weekdays") {
+  //      payload.time = selectedSchedule.time
+  //    } else if (selectedSchedule.type === "weekends") {
+  //      payload.saturday_time = selectedSchedule.saturday_time
+  //      payload.sunday_time = selectedSchedule.sunday_time
+  //    }
+  //    console.log("enroll api", `${BaseUrl}/api/payments/create_order/`, payload)
+  //   const orderResponse = await axios.post(
+  //      `${BaseUrl}/api/payments/create_order/`,
+  //      payload,
+  //      { headers: { Authorization: `Bearer ${token}` } }
      
-      )
+  //     )
 
-      const orderData = orderResponse.data.data
-      console.log("orderData", orderData)
-      const options = {
-        key: razorpay_key,
-        amount: orderData.amount,
-        currency: orderData.currency,
-        name: course.name,
-        description: course.description,
-        order_id: orderData.order_id,
-        handler: async function (response) {
-          console.log("Razorpay response:", response)
-          try {
-            const verifyRes = await axios.post(
-              `${BaseUrl}/api/payments/verify_payment/`,
-              {
-                razorpay_order_id: response.razorpay_order_id,
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature,
-                subscription_id: orderData.subscription_id
-              },
-              { headers: { Authorization: `Bearer ${token}` } }
-            )
+  //     const orderData = orderResponse.data.data
+  //     console.log("orderData", orderData)
+  //     const options = {
+  //       key: razorpay_key,
+  //       amount: orderData.amount,
+  //       currency: orderData.currency,
+  //       name: course.name,
+  //       description: course.description,
+  //       order_id: orderData.order_id,
+  //       handler: async function (response) {
+  //         console.log("Razorpay response:", response)
+  //         try {
+  //           const verifyRes = await axios.post(
+  //             `${BaseUrl}/api/payments/verify_payment/`,
+  //             {
+  //               razorpay_order_id: response.razorpay_order_id,
+  //               razorpay_payment_id: response.razorpay_payment_id,
+  //               razorpay_signature: response.razorpay_signature,
+  //               subscription_id: orderData.subscription_id
+  //             },
+  //             { headers: { Authorization: `Bearer ${token}` } }
+  //           )
 
-            toast.success("✅ Payment verified successfully!")
-            dispatch(fetchCourses())
-            dispatch(getTrialPeriod())
-            setModal(false)
-            // navigate("/mycourses", { replace: true }) 
-          } catch (error) {
-            console.error("Verification error:", error)
-            toast.error("❌ Payment verification failed")
-          }
-        },
-        prefill: {
-          name: "John Doe",
-          email: "john@example.com",
-          contact: "9999999999"
-        },
-        theme: { color: "#3399cc" }
-      }
+  //           toast.success("✅ Payment verified successfully!")
+  //           dispatch(fetchCourses())
+  //           dispatch(getTrialPeriod())
+  //           setModal(false)
+  //           // navigate("/mycourses", { replace: true }) 
+  //         } catch (error) {
+  //           console.error("Verification error:", error)
+  //           toast.error("❌ Payment verification failed")
+  //         }
+  //       },
+  //       prefill: {
+  //         name: "John Doe",
+  //         email: "john@example.com",
+  //         contact: "9999999999"
+  //       },
+  //       theme: { color: "#3399cc" }
+  //     }
 
-      const rzp = new window.Razorpay(options)
-      rzp.open()
-    } catch (error) {
-      console.error("Enrollment error:", error)
-      toast.error("Something went wrong. Try again.")
-    } finally {
-      setEnrolling(false)
-    }
-  }
+  //     const rzp = new window.Razorpay(options)
+  //     rzp.open()
+  //   } catch (error) {
+  //     console.error("Enrollment error:", error)
+  //     toast.error("Something went wrong. Try again.")
+  //   } finally {
+  //     setEnrolling(false)
+  //   }
+  // }
 
   // ✅ Group batches if available
 
+
+   const handleEnroll = async () => {
+    if (!selectedSchedule) {
+      toast.error("Please select a schedule before enrolling");
+      return;
+    }
+
+    setEnrolling(true);
+    try {
+      await dispatch(
+        enrollCourse({ course, selectedSchedule, razorpay_key })
+      ).unwrap();
+
+      // ✅ optional: close modal or redirect
+      setModal(false);
+      dispatch(fetchCourses())
+      dispatch(getTrialPeriod())
+    } catch (error) {
+      console.error("Enroll failed:", error);
+      // toast.error handled in thunk
+    } finally {
+      setEnrolling(false);
+    }
+  };
 const groupedBatches = course.schedule?.reduce((acc, batch) => {
   if (!acc[batch.type]) acc[batch.type] = []
   acc[batch.type].push(batch)

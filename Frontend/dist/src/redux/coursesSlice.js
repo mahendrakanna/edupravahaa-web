@@ -36,6 +36,105 @@ export const fetchCourses = createAsyncThunk(
   }
 );
 
+
+export const enrollCourse = createAsyncThunk(
+  "courses/enrollCourse",
+  async ({ course, selectedSchedule, razorpay_key }, { rejectWithValue, getState, dispatch }) => {
+    try {
+      const { auth } = getState();
+      const token = auth?.token;
+
+      if (!token) {
+        return rejectWithValue("No access token found");
+      }
+
+      if (!apiList.payments?.create_order) {
+        return rejectWithValue("Create order endpoint is undefined");
+      }
+
+      // Build payload
+      const payload = {
+        course_id: course.id,
+        batch: selectedSchedule.type,
+        start_date: selectedSchedule.batchStartDate,
+        end_date: selectedSchedule.batchEndDate,
+      };
+
+      if (selectedSchedule.type === "weekdays") {
+        payload.time = selectedSchedule.time;
+      } else if (selectedSchedule.type === "weekends") {
+        payload.saturday_time = selectedSchedule.saturday_time;
+        payload.sunday_time = selectedSchedule.sunday_time;
+      }
+
+      console.log("Enroll API Payload:", payload);
+
+      // Call create_order
+      const orderResponse = await api.post(
+        apiList.payments.create_order,
+        payload,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+
+      const orderData = orderResponse.data.data;
+      console.log("orderData", orderData);
+
+      // Razorpay options
+      const options = {
+        key: razorpay_key,
+        amount: orderData.amount,
+        currency: orderData.currency,
+        name: course.name,
+        description: course.description,
+        order_id: orderData.order_id,
+        handler: async function (response) {
+          console.log("Razorpay response:", response);
+          try {
+            const verifyRes = await api.post(
+              apiList.payments.verify_payment,
+              {
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+                subscription_id: orderData.subscription_id,
+              },
+              { headers: { Authorization: `Bearer ${token}` } }
+            );
+
+            toast.success("✅ Payment verified successfully!");
+            dispatch(fetchCourses());
+            dispatch(fetchMyCourses());
+            // dispatch(getTrialPeriod()); // add if you have it in slice
+          } catch (error) {
+            console.error("Verification error:", error);
+            toast.error("❌ Payment verification failed");
+          }
+        },
+        prefill: {
+          name: "John Doe",
+          email: "john@example.com",
+          contact: "9999999999",
+        },
+        theme: { color: "#3399cc" },
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.open();
+
+      return orderResponse.data;
+    } catch (err) {
+      console.error("Enrollment error:", err.message, err.config?.url);
+      const errorMessage =
+        err.response?.data?.message || err.message || "Failed to enroll";
+      toast.error(errorMessage);
+      return rejectWithValue(err.response?.data || errorMessage);
+    }
+  }
+);
+
+
 export const fetchMyCourses = createAsyncThunk(
   "courses/fetchMyCourses",
   async (_, { rejectWithValue, getState }) => {
@@ -154,6 +253,22 @@ const coursesSlice = createSlice({
         }
       })
       .addCase(fetchSessions.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      })
+
+      .addCase(enrollCourse.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(enrollCourse.fulfilled, (state, action) => {
+        state.loading = false;
+        // success toast if API returned message
+        if (action.payload?.message) {
+          toast.success(action.payload.message);
+        }
+      })
+      .addCase(enrollCourse.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
       });
