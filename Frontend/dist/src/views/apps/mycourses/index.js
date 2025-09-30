@@ -7,42 +7,26 @@ import { useSkin } from '@hooks/useSkin'
 import '@styles/react/pages/courses.scss'
 import ComponentSpinner from "../../../@core/components/spinner/Loading-spinner"
 
-
 const MyCourses = () => {
-
   const dispatch = useDispatch()
   const { mycourseslist, loading, error } = useSelector((state) => state.courses)
   const { skin } = useSkin()
-  // console.log("Skin:", skin)
+
   useEffect(() => {
     dispatch(fetchMyCourses())
   }, [dispatch])
-  // console.log("My Courses:", mycourseslist)
+
   return (
-<Container fluid className="my-courses-container py-2 rounded shadow-sm">
-      <h2 className="mb-2 text-center"> MyCourses</h2>
+    <Container fluid className="my-courses-container py-2 rounded shadow-sm">
+      <h2 className="mb-2 text-center">My Courses</h2>
 
-      {/* {loading && (
-      <div
-        className="d-flex justify-content-center align-items-center"
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          width: "100%",
-          height: "100%",
-          background: "transparent  overlay", 
-          zIndex: 9999,
-        }}
-      >
-        <Spinner style={{ width: "3rem", height: "3rem" }} color="primary" />
-      </div>
-    )} */}
-    {loading && (
-      <ComponentSpinner/>
-    )}
+      {loading && <ComponentSpinner />}
 
-      {error && <Alert color="danger">{error}</Alert>}
+      {error && <p className="text-danger text-center">{error}</p>}
+
+      {!loading && !error && Array.isArray(mycourseslist) && mycourseslist.length === 0 && (
+        <p className="text-center">No courses available.</p>
+      )}
 
       <Row className="g-4">
         {!loading &&

@@ -123,10 +123,10 @@ const isPhoneValid = phonePattern.test(watchedPhone)
       setError("email", { type: "manual", message: "Please verify your email" });
       return;
     }
-    if (!isPhoneVerified) {
-      setError("phone", { type: "manual", message: "Please verify your phone number" });
-      return;
-    }
+    // if (!isPhoneVerified) {
+    //   setError("phone", { type: "manual", message: "Please verify your phone number" });
+    //   return;
+    // }
     if (Object.values(tempData).every(field => field.length > 0) && data.terms === true) {
       const payload = {
         username: data.username,
@@ -294,7 +294,7 @@ const isPhoneValid = phonePattern.test(watchedPhone)
             )}
 
               </div>
-              <div className="mb-1">
+              {/* <div className="mb-1">
                 <Label className="form-label" for="phone">Phone</Label>
                 
               <div className="position-relative">
@@ -337,7 +337,6 @@ const isPhoneValid = phonePattern.test(watchedPhone)
                     Verify
                   </Button>
                 )}
-                {/* {errors.phone && <FormFeedback>{errors.phone.message}</FormFeedback>} */}
               </div>
 
                
@@ -359,8 +358,36 @@ const isPhoneValid = phonePattern.test(watchedPhone)
                   </div>
                 )}
                 
-              </div>
+              </div> */}
 
+            <div className="mb-1">
+              <Label className="form-label" for="phone">Phone</Label>
+
+              <div className="position-relative">
+                <Controller
+                  name="phone"
+                  control={control}
+                  rules={{
+                    required: "Phone number is required",
+                    pattern: {
+                      value: /^[0-9]{10}$/,
+                      message: "Enter a valid 10-digit phone number"
+                    }
+                  }}
+                  render={({ field }) => (
+                    <Input
+                      type="tel"
+                      id="phone"
+                      placeholder="123567890"
+                      invalid={!!errors.phone}
+                      {...field}
+                    />
+                  )}
+                />
+
+
+              </div>
+              </div>
               {/* Password */}
               <div className="mb-1">
                 <Label className="form-label" for="password">Password</Label>

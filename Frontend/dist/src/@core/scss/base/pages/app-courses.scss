@@ -90,11 +90,20 @@
     justify-content: space-between; /* push bottom section down */
   }
 
-  .course-description {
-    flex-grow: 1;
-    margin-bottom: 1rem;
-    color: $body-color;
-  }
+.course-description {
+  flex-grow: 1;
+  margin-bottom: 1rem;
+  color: $body-color;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: normal;
+  max-height: 4.5em;   
+  line-height: 1.5em;  
+}
+
 
   .course-footer {
     margin-top: auto;

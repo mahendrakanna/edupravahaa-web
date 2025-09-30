@@ -1,6 +1,6 @@
 import { useEffect } from "react"
 import { useDispatch, useSelector } from "react-redux"
-import { Col, Container, Row, Spinner, Alert } from "reactstrap"
+import { Col, Container, Row } from "reactstrap"
 import CourseCard from "./CourseCard"
 import { fetchCourses } from "../../../redux/coursesSlice"
 import ComponentSpinner from "../../../@core/components/spinner/Loading-spinner"
@@ -8,20 +8,22 @@ import ComponentSpinner from "../../../@core/components/spinner/Loading-spinner"
 const Courses = () => {
   const dispatch = useDispatch()
   const { courses, loading, error } = useSelector((state) => state.courses)
+
   useEffect(() => {
     dispatch(fetchCourses())
   }, [dispatch])
 
   return (
-<Container fluid className="my-courses-container py-2 rounded shadow-sm">
+    <Container fluid className="my-courses-container py-2 rounded shadow-sm">
       <h2 className="mb-2 text-center">Our Courses</h2>
 
-       {loading && (
-      <ComponentSpinner/>
-    )}
+      {loading && <ComponentSpinner />}
 
+      {error && <p className="text-danger text-center">{error}</p>}
 
-      {error && <Alert color="danger">{error}</Alert>}
+      {!loading && !error && courses.length === 0 && (
+        <p className="text-center">No courses available.</p>
+      )}
 
       <Row className="g-4">
         {!loading &&

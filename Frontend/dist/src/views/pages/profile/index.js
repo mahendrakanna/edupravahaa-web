@@ -255,15 +255,15 @@ const {
     const emailChanged = formData.email !== user?.email;
     const phoneChanged = formData.phone_number !== user?.phone_number;
     
-    if (emailChanged && !emailVerified) {
-      toast.error('Please verify your new email address first');
-      return;
-    }
+    // if (emailChanged && !emailVerified) {
+    //   toast.error('Please verify your new email address first');
+    //   return;
+    // }
     
-    if (phoneChanged && !phoneVerified) {
-      toast.error('Please verify your new phone number first');
-      return;
-    }
+    // if (phoneChanged && !phoneVerified) {
+    //   toast.error('Please verify your new phone number first');
+    //   return;
+    // }
     
     handleProfileUpdate();
   };
@@ -514,14 +514,14 @@ const {
                           placeholder="Enter phone number"
                          
                         />
-                        <Button 
+                        {/* <Button 
                           color="outline-primary" 
                           className="ms-2"
                           onClick={() => handleSendOtp('phone', formData.phone_number)}
                           disabled={!isPhoneChanged || sendOtpLoading}
                         >
                           {sendOtpLoading ? 'Sending...' : (isPhoneChanged && !phoneVerified ? 'Verify' : 'Update')}
-                        </Button>
+                        </Button> */}
                       </div>
                     </FormGroup>
                     <div className="d-flex mt-4">
