@@ -263,7 +263,7 @@ export function getLandingDefaults() { const hash = window.location.hash; if (ha
   export function createSocket() {
     // Use VITE_SOCKET_URL from env, fallback to same-origin
     const env = (typeof import.meta !== 'undefined' && import.meta.env) || {};
-    const socketUrl = env.VITE_SOCKET_URL || ''; // fallback to same-origin if not set
+    const socketUrl = env.VITE_SOCKET_URL || ''; 
 
     const socket = io(socketUrl, {
       path: '/socket.io/',

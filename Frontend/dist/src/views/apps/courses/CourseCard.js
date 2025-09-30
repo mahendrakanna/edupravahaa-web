@@ -136,7 +136,8 @@ const CourseCard = ({ course }) => {
 
       // ✅ optional: close modal or redirect
       setModal(false);
-      navigate("/mycourses");
+      dispatch(fetchCourses())
+      dispatch(getTrialPeriod())
     } catch (error) {
       console.error("Enroll failed:", error);
       // toast.error handled in thunk
