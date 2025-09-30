@@ -3,6 +3,7 @@ import { useDispatch, useSelector } from "react-redux"
 import { Col, Container, Row, Spinner, Alert } from "reactstrap"
 import CourseCard from "./CourseCard"
 import { fetchCourses } from "../../../redux/coursesSlice"
+import ComponentSpinner from "../../../@core/components/spinner/Loading-spinner"
 
 const Courses = () => {
   const dispatch = useDispatch()
@@ -15,21 +16,8 @@ const Courses = () => {
 <Container fluid className="my-courses-container py-2 rounded shadow-sm">
       <h2 className="mb-2 text-center">Our Courses</h2>
 
-      {loading && (
-      <div
-        className="d-flex justify-content-center align-items-center"
-        style={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          width: "100%",
-          height: "100%",
-          background: "transparent overlay", 
-          zIndex: 9999,
-        }}
-      >
-        <Spinner style={{ width: "3rem", height: "3rem" }} color="primary" />
-      </div>
+       {loading && (
+      <ComponentSpinner/>
     )}
 
 

@@ -5,6 +5,7 @@ import { Col, Container, Row, Spinner, Alert } from "reactstrap"
 import CourseCard from "./CourseCard"
 import { useSkin } from '@hooks/useSkin'
 import '@styles/react/pages/courses.scss'
+import ComponentSpinner from "../../../@core/components/spinner/Loading-spinner"
 
 
 const MyCourses = () => {
@@ -21,7 +22,7 @@ const MyCourses = () => {
 <Container fluid className="my-courses-container py-2 rounded shadow-sm">
       <h2 className="mb-2 text-center"> MyCourses</h2>
 
-      {loading && (
+      {/* {loading && (
       <div
         className="d-flex justify-content-center align-items-center"
         style={{
@@ -36,6 +37,9 @@ const MyCourses = () => {
       >
         <Spinner style={{ width: "3rem", height: "3rem" }} color="primary" />
       </div>
+    )} */}
+    {loading && (
+      <ComponentSpinner/>
     )}
 
       {error && <Alert color="danger">{error}</Alert>}

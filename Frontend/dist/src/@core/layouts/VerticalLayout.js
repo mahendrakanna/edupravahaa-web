@@ -288,15 +288,15 @@ const formatTime = (seconds) => {
           setMenuCollapsed={setMenuCollapsed}
         />
       ) : null} */}
-      {/* <footer
+      <footer
         className={classnames(`footer footer-light ${footerClasses[footerType] || 'footer-static'}`, {
           'd-none': footerType === 'hidden'
         })}
-      > */}
-        {/* {footer ? footer : <FooterComponent footerType={footerType} footerClasses={footerClasses} />} */}
-      {/* </footer> */}
+      > 
+         {footer ? footer : <FooterComponent footerType={footerType} footerClasses={footerClasses} />} 
+          </footer>
       
-{/* 
+
       {themeConfig.layout.scrollTop === true ? (
         <div className='scroll-to-top'>
           <ScrollToTop showOffset={300} className='scroll-top d-block'>
@@ -305,7 +305,7 @@ const formatTime = (seconds) => {
             </Button>
           </ScrollToTop>
         </div>
-      ) : null} */}
+      ) : null}
     </div>
   )
 }

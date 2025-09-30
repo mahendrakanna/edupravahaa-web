@@ -60,7 +60,7 @@ const CourseCard = ({ course }) => {
        payload.saturday_time = selectedSchedule.saturday_time
        payload.sunday_time = selectedSchedule.sunday_time
      }
-
+     console.log("enroll api", `${BaseUrl}/api/payments/create_order/`, payload)
     const orderResponse = await axios.post(
        `${BaseUrl}/api/payments/create_order/`,
        payload,
@@ -137,7 +137,7 @@ const batchList = groupedBatches ? Object.values(groupedBatches) : []
         ? course.advantages.split(',').map(s => s.trim()).filter(Boolean)
         : [])
 
-      console.log("courses", course, batchList)
+      // console.log("courses", course, batchList)
   return (
     <>
       <Card className="shadow-sm h-100 course-card">
@@ -155,16 +155,13 @@ const batchList = groupedBatches ? Object.values(groupedBatches) : []
           <CardTitle tag="h5" className="fw-bold">
             {course.name}
           </CardTitle>
-          <CardText className="text-muted">{course.description}</CardText>
-          <div className="d-flex flex-column align-items-end mt-2">
-            <span>
-              <FaChartLine className="text-primary me-1" />
-              ₹{course.base_price}
-            </span>
-            {batchList.length === 0 && (
-              <span className="text-muted fw-bold mt-1">Coming Soon ...</span>
-            )}
-          </div>
+          <CardText className="course-description text-muted">{course.description}</CardText>
+           <div className="course-footer">
+              <span className="price">₹{course.base_price}</span>
+              {batchList.length === 0 && (
+                <span className="coming-soon">Coming Soon ...</span>
+              )}
+            </div>
         </CardBody>
         <CardFooter className="text-end">
           <Button color="primary" size="sm" onClick={toggle}>

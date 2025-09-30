@@ -11,7 +11,7 @@ export const fetchTeacherDashboard = createAsyncThunk(
     try {
       const { auth } = getState();
       const token = auth?.token || localStorage.getItem("access");
-      console.log("token", token);
+      console.log("teacher url:", `${API_URL}${apiList.dashboard.teacherStats}`);
 
       const response = await api.get(`${API_URL}${apiList.dashboard.teacherStats}`, {
         headers: { Authorization: `Bearer ${token}` },

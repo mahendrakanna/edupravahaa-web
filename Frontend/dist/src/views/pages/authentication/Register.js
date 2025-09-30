@@ -20,6 +20,7 @@ import { AbilityContext } from '@src/utility/context/Can'
 
 // ** Custom Components
 import InputPasswordToggle from '@components/input-password-toggle'
+import themeConfig from '@configs/themeConfig'
 
 // ** Reactstrap Imports
 import {
@@ -191,6 +192,12 @@ const isPhoneValid = phonePattern.test(watchedPhone)
     <UILoader blocking={isLoading}>
       <div className="auth-wrapper auth-cover">
       <Row className="auth-inner m-0">
+        <Link className='brand-logo' to='/' onClick={e => e.preventDefault()}>
+          {/* <span className='brand-logo'> */}
+              <img src={themeConfig.app.appLogoImage} alt='logo' height={30} width={30} />
+            {/* </span> */}
+          <h2 className='brand-text text-primary ms-1'>Edu Pravahaa</h2>
+        </Link>
         <Col className="d-none d-lg-flex align-items-center p-5" lg="8" sm="12">
           <div className="w-100 d-lg-flex align-items-center justify-content-center px-5">
             <img className="img-fluid" src={source} alt="Register Cover" />
