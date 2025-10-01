@@ -63,18 +63,13 @@ class CourseListView(generics.ListAPIView):
     
     def get_queryset(self):
         """Filters courses based on user role, purchase status, and query parameters."""
-        today = date.today()
-        # Start with active courses and apply upcoming batch filter for students
-        queryset = Course.objects.filter(is_active=True)
+        queryset = Course.objects.filter(is_active=True).prefetch_related("pricings")
         user = self.request.user
         if user.is_authenticated and user.role == 'student':
-            # Only include courses with upcoming batches
-            # queryset = queryset.filter(class_schedules__batch_start_date__gte=today).distinct()
-            if user.has_purchased_courses:
-                purchased_course_ids = CourseSubscription.objects.filter(
-                    student=user, payment_status='completed'
-                ).values_list('course__id', flat=True)
-                queryset = queryset.exclude(id__in=purchased_course_ids)
+            purchased_course_ids = CourseSubscription.objects.filter(
+                student=user, payment_status='completed'
+            ).values_list('course__id', flat=True)
+            queryset = queryset.exclude(id__in=purchased_course_ids)
         search = self.request.query_params.get('search', None)
         if search:
             queryset = queryset.filter(

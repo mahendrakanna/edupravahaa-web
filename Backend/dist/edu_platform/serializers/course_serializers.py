@@ -8,14 +8,33 @@ class CourseSerializer(serializers.ModelSerializer):
     """Serializes course data for retrieval and updates."""
     batches = serializers.SerializerMethodField()
     schedule = serializers.SerializerMethodField()
+    original_price = serializers.SerializerMethodField()
+    discount_percent = serializers.SerializerMethodField()
+    final_price = serializers.SerializerMethodField()
+
 
     class Meta:
         model = Course
         fields = [
             'id', 'name', 'slug', 'description', 'category', 'level', 'thumbnail',
             'duration_hours', 'base_price', 'advantages', 'batches', 'schedule',
-            'is_active', 'created_at', 'updated_at'
+            'is_active', 'created_at', 'updated_at', 'original_price', 'discount_percent', 'final_price'
         ]
+
+    def get_pricing_obj(self, obj):
+        return obj.pricings.first()
+
+    def get_original_price(self, obj):
+        pricing = self.get_pricing_obj(obj)
+        return str(pricing.original_price) if pricing else None
+
+    def get_discount_percent(self, obj):
+        pricing = self.get_pricing_obj(obj)
+        return str(pricing.discount_percent) if pricing else None
+
+    def get_final_price(self, obj):
+        pricing = self.get_pricing_obj(obj)
+        return str(pricing.final_price) if pricing else None
 
     def get_batches(self, obj):
         request = self.context.get('request')

@@ -450,3 +450,19 @@ class CourseEnrollment(models.Model):
     def __str__(self):
         """Returns student email, course name, and batch."""
         return f"{self.student.email} - {self.course.name} ({self.batch})"
+        
+
+class CoursePricing(models.Model):
+    """Manages dynamic pricing for courses with discounts and validity periods."""
+    course=models.ForeignKey(
+        Course,on_delete=models.CASCADE,related_name='pricings'
+    )
+    original_price=models.DecimalField(max_digits=10,decimal_places=2)
+    discount_percent=models.DecimalField(max_digits=10,decimal_places=2)
+    final_price=models.DecimalField(max_digits=10,decimal_places=2)
+    created_at=models.DateTimeField(auto_now_add=True)
+    class Meta:
+        db_table='course_pricings'
+        ordering=['-created_at']
+    def __str__(self):
+        return f"{self.course.name} - {self.final_price}"
