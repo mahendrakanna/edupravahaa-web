@@ -137,9 +137,7 @@ const CourseCard = ({ course }) => {
 
       // ✅ optional: close modal or redirect
       setModal(false);
-      dispatch(getTrialPeriod())
-      dispatch(fetchCourses())
-      dispatch(getProfile())
+      
       
     } catch (error) {
       console.error("Enroll failed:", error);

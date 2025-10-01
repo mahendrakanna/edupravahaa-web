@@ -37,9 +37,9 @@ const NavbarBookmarks = props => {
   const store = useSelector(state => state.navbar)
 
   // ** ComponentDidMount
-  useEffect(() => {
-    dispatch(getBookmarks())
-  }, [])
+  // useEffect(() => {
+  //   dispatch(getBookmarks())
+  // }, [])
 
   // ** Loops through Bookmarks Array to return Bookmarks
   const renderBookmarks = () => {

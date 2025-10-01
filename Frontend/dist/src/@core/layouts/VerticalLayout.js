@@ -53,7 +53,7 @@ const VerticalLayout = props => {
   const { footerType, setFooterType } = useFooterType()
   const { navbarColor, setNavbarColor } = useNavbarColor()
   const { layout, setLayout, setLastLayout } = useLayout()
-  const { trialPeriodData, } = useSelector((state) => state.auth);
+  const { trialPeriodData,user } = useSelector((state) => state.auth);
   const [remainingTime, setRemainingTime] = useState(
   trialPeriodData?.trial_remaining_seconds || 0
 );
@@ -108,8 +108,11 @@ const VerticalLayout = props => {
   }, [])
 
   useEffect(() =>{
-    dispatch(getTrialPeriod());
     dispatch(getProfile());
+    if(user && user.role === "student" && user?.has_purchased === false){
+    dispatch(getTrialPeriod());
+    }
+    
   }, [] )
 
 useEffect(() => {

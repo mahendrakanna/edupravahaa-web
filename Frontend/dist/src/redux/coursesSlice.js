@@ -2,6 +2,7 @@ import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import api from "../utility/api"; 
 import apiList from "../../api.json";
 import toast from 'react-hot-toast';
+import { getProfile, getTrialPeriod } from "./authentication";
 
 
 
@@ -105,9 +106,10 @@ export const enrollCourse = createAsyncThunk(
             );
 
             toast.success("✅ Payment verified successfully!");
-            dispatch(fetchCourses());
-            dispatch(fetchMyCourses());
-            // dispatch(getTrialPeriod()); // add if you have it in slice
+            dispatch(getTrialPeriod())
+            dispatch(fetchCourses())
+            dispatch(getProfile())
+
           } catch (error) {
             console.error("Verification error:", error);
             toast.error("❌ Payment verification failed");

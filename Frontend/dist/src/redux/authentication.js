@@ -324,7 +324,7 @@ const authSlice = createSlice({
     });
     builder.addCase(getTrialPeriod.fulfilled, (state, action) => {
       state.loading = false;
-      state.trialPeriodData = action.payload.data;
+      state.trialPeriodData = action.payload.data || null;
     });
     builder.addCase(getTrialPeriod.rejected, (state, action) => {
       state.loading = false;
@@ -340,6 +340,7 @@ const authSlice = createSlice({
       state.user = null;
       state.token = null;
       state.refreshToken = null;
+      state.trialPeriodData = null; 
 
       localStorage.removeItem('access');
       localStorage.removeItem('refresh');
@@ -348,6 +349,10 @@ const authSlice = createSlice({
     builder.addCase(logoutUser.rejected, (state, action) => {
       state.loading = false;
       state.error = action.payload;
+      state.user = null;
+      state.token = null;
+      state.refreshToken = null;
+      state.trialPeriodData = null; 
       localStorage.removeItem('access');
       localStorage.removeItem('refresh');
       localStorage.removeItem('userData');
