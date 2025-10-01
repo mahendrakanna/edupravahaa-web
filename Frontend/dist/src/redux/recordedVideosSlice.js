@@ -57,9 +57,7 @@ export const uploadRecording = createAsyncThunk(
       }
 
       const formData = new FormData();
-      formData.append("recording", blob, `recording_${roomId}_${Date.now()}.webm`);
-      formData.append("roomId", roomId);      
-      // formData.append("recordedBy", userId);  
+      formData.append("recording", blob, `class_${roomId}_${userId}.webm`);
 
       const response = await api.post(
         `${apiList.classes.uploadRecording.replace(":roomId", roomId)}`, 
@@ -84,7 +82,6 @@ export const uploadRecording = createAsyncThunk(
     }
   }
 );
-
 
 // ------------------ Slice ------------------ //
 

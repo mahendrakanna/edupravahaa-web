@@ -265,17 +265,23 @@ export default function LiveClass() {
       ]);
 
       //  4. Setup MediaRecorder
-      recordedBlobsRef.current = [];
-      const mr = new MediaRecorder(mixedStream, {
-        mimeType: "video/webm;codecs=vp9,opus",
-      });
+      // recordedBlobsRef.current = [];
+      //   const mr = new MediaRecorder(mixedStream, {
+      //     mimeType: "video/webm;codecs=vp9,opus",
+      // });
+      let options = { mimeType: "video/webm;codecs=vp8,opus" };
+if (!MediaRecorder.isTypeSupported(options.mimeType)) {
+  options = { mimeType: "video/webm" };
+}
+const mr = new MediaRecorder(mixedStream, options);
+      
 
       mr.ondataavailable = (e) => {
         if (e.data && e.data.size > 0) recordedBlobsRef.current.push(e.data);
       };
 
       mr.onstop = async () => {
-        const blob = new Blob(recordedBlobsRef.current, { type: "video/webm" });
+        const blob = new Blob(recordedBlobsRef.current, { type: mr.mimeType });
 
         dispatch(
           uploadRecording({
@@ -316,14 +322,16 @@ export default function LiveClass() {
   };
 
   const stopRecording = () => {
-    const mr = recorderRef.current;
-    if (mr && mr.state !== "inactive") {
-      mr.stop();
+  const mr = recorderRef.current;
+  if (mr && mr.state !== 'inactive') {
+    mr.stop();
+    setTimeout(() => { // Wait for ondataavailable/onstop
       recorderRef.current = null;
       setIsRecording(false);
-      toast("Recording saved", { autoClose: Timeout.SHORT });
-    }
+      toast('Recording saved', { autoClose: Timeout.SHORT });
+    }, 1000);
   }
+};
  
   const leaveMeeting = () => {
     if (user.role === "teacher" && isRecording) {

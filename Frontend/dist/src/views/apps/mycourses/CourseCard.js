@@ -121,14 +121,16 @@ const CourseCard = ({ course }) => {
 
 
           <div className="mt-1 d-flex justify-content-between">
-            <span>
+            {/* <span>
               <FaClock className="me-2 text-secondary" />
               Duration: {courseData.duration_hours} hrs
-            </span>
+            </span> */}
+             {user && user.role === "student" && (
             <span>
               <FaChartLine className="me-2 text-primary" />
-              Price: ₹{courseData?.base_price}
+              Price: ₹{courseData?.price}
             </span>
+          )}
           </div>
 
           {/* ✅ Purchased Info */}

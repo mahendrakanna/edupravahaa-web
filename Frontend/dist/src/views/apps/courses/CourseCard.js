@@ -21,7 +21,7 @@ import {
 import { FaCheckCircle, FaChartLine, FaClock } from "react-icons/fa"
 import toast from "react-hot-toast"
 import { enrollCourse, fetchCourses } from "../../../redux/coursesSlice"
-import { getTrialPeriod } from "../../../redux/authentication"
+import { getProfile, getTrialPeriod } from "../../../redux/authentication"
 
 const CourseCard = ({ course }) => {
   const [modal, setModal] = useState(false)
@@ -139,6 +139,7 @@ const CourseCard = ({ course }) => {
       setModal(false);
       dispatch(getTrialPeriod())
       dispatch(fetchCourses())
+      dispatch(getProfile())
       
     } catch (error) {
       console.error("Enroll failed:", error);
@@ -182,12 +183,32 @@ const batchList = groupedBatches ? Object.values(groupedBatches) : []
             {course.name}
           </CardTitle>
           <CardText className="course-description text-muted">{course.description}</CardText>
-           <div className="course-footer">
-              <span className="price">₹{course.base_price}</span>
-              {batchList.length === 0 && (
-                <span className="coming-soon">Coming Soon ...</span>
-              )}
-            </div>
+           <div className="course-footer d-flex flex-column">
+  {/* Price Row */}
+  <div className="d-flex align-items-center gap-1 mb-1">
+    {course.original_price && course.discount_percent ? (
+      <>
+        <span className="text-danger text-decoration-line-through">
+          ₹{course.original_price.toLocaleString()}
+        </span>
+        <span className="fw-bold text-success">
+          ₹{course.final_price.toLocaleString()}
+        </span>
+        <span className="badge bg-success">{course.discount_percent}% OFF</span>
+      </>
+    ) : (
+      <span className="fw-bold">₹{course.final_price || course.base_price}</span>
+    )}
+  </div>
+
+  {/* Coming Soon */}
+  {batchList.length === 0 && (
+    <div className="d-flex justify-content-end justify-items-end">
+      <span className="text-muted fw-bold">Coming Soon ...</span>
+    </div>
+  )}
+</div>
+
         </CardBody>
         <CardFooter className="text-end">
           <Button color="primary" size="sm" onClick={toggle}>
@@ -336,14 +357,27 @@ const batchList = groupedBatches ? Object.values(groupedBatches) : []
 
 
           <div className="mt-1 d-flex justify-content-between">
-            <span>
+            {/* <span>
               <FaClock className="me-2 text-secondary" />
               Duration: {course.duration_hours} hrs
-            </span>
-            <span>
+            </span> */}
+            <div className="d-flex align-items-center gap-1 mb-2">
               <FaChartLine className="me-2 text-primary" />
-              Price: ₹{course.base_price}
-            </span>
+              {course.original_price && course.discount_percent ? (
+                <>
+                  <span className="text-danger text-decoration-line-through">
+                    ₹{course.original_price.toLocaleString()}
+                  </span>
+                  <span className="fw-bold text-success">
+                    ₹{course.final_price.toLocaleString()}
+                  </span>
+                  <span className="badge bg-success">{course.discount_percent}% OFF</span>
+                </>
+              ) : (
+                <span className="fw-bold">₹{course.final_price || course.base_price}</span>
+              )}
+            </div>
+
           </div>
         </ModalBody>
         <ModalFooter className="d-flex justify-content-between">

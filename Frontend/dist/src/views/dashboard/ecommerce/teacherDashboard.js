@@ -16,6 +16,7 @@ import { fetchTeacherDashboard } from "../../../redux/teacherDashboardSlice";
 
 import MyCourses from '../../apps/mycourses'
 import SpinnerComponent from "../../../@core/components/spinner/Fallback-spinner";
+import "@styles/react/pages/teacher-dashboard.scss"; 
 
 // 🔹 Reusable Stat Item (inline style like DashboardStats)
 const StatItem = ({ icon, color, label, value, unit = "" }) => (
