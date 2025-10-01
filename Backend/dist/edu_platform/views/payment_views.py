@@ -391,6 +391,13 @@ class VerifyPaymentView(BaseAPIView):
                 user.save(update_fields=['has_purchased_courses', 'trial_end_date'])
             
             enrollment = CourseEnrollment.objects.get(subscription=subscription)
+
+            # ✅ Store the final price student paid
+            latest_pricing = subscription.course.pricings.first()
+            if latest_pricing:
+                enrollment.price = latest_pricing.final_price
+
+            enrollment.save(update_fields=['price'])
             
             logger.info(f"Payment verified for subscription {subscription.id}, user {request.user.id}, course {subscription.course.name}, batch {enrollment.batch}")
             return api_response(

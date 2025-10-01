@@ -252,49 +252,75 @@ class CourseSerializer(serializers.ModelSerializer):
 
 class MyCoursesSerializer(serializers.Serializer):
     def to_representation(self, instance):
+        user = self.context['request'].user
+
+        # Handle CourseSubscription instance (student purchased courses)
         if isinstance(instance, CourseSubscription):
-            # Fetch the specific CourseEnrollment for the subscription
             enrollment = CourseEnrollment.objects.filter(
                 subscription=instance,
                 student=instance.student,
                 course=instance.course,
                 batch=instance.batch
             ).first()
+
             if not enrollment:
                 return {
                     'message': f"No enrollment found for course {instance.course.name}.",
                     'message_type': 'error'
                 }
-            
-            # Check if schedule data is complete
+
             course_data = CourseSerializer(instance.course, context=self.context).data
+
+            # Error handling: missing schedule
             if not course_data.get('schedule'):
                 return {
                     'message': f"No schedule available for your enrolled batch in {instance.course.name}.",
-                    'message_type': 'Error'
+                    'message_type': 'error'
                 }
-            
+
+            # Pricing fields logic
+            if user.role == 'student':
+                # Remove all original pricing fields
+                for field in ['original_price', 'discount_percent', 'final_price', 'base_price', 'pricing']:
+                    course_data.pop(field, None)
+                # Add paid price from enrollment
+                course_data['price'] = str(enrollment.price) if enrollment.price else None
+            elif user.role == 'teacher':
+                # Remove all pricing fields for teacher view
+                for field in ['original_price', 'discount_percent', 'final_price', 'base_price', 'price', 'pricing']:
+                    course_data.pop(field, None)
+
             return {
-                    'id': instance.id,
-                    'course': course_data,
-                    'purchased_at': instance.purchased_at,
-                    'payment_status': instance.payment_status
-                }
-            
+                'id': instance.id,
+                'course': course_data,
+                'purchased_at': instance.purchased_at,
+                'payment_status': instance.payment_status
+            }
+
+        # Handle Course instance (assigned courses for teacher)
         elif isinstance(instance, Course):
             course_data = CourseSerializer(instance, context=self.context).data
+
+            # Error handling: missing schedule
             if not course_data.get('schedule'):
                 return {
                     'message': f"No schedule available for course {instance.name}.",
-                    'message_type': 'Error',
-                }
-            return {
-                    'id': instance.id,
-                    'course': course_data,
-                    'purchased_at': None,
-                    'payment_status': None
+                    'message_type': 'error',
                 }
 
+            if user.role == 'teacher':
+                # Remove all pricing fields for teacher
+                for field in ['original_price', 'discount_percent', 'final_price', 'base_price', 'price', 'pricing']:
+                    course_data.pop(field, None)
+
+            return {
+                'id': instance.id,
+                'course': course_data,
+                'purchased_at': None,
+                'payment_status': None
+            }
+
+        # Default error for invalid data
         return {
             'message': 'Invalid data provided for course retrieval.',
             'message_type': 'error'
